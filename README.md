@@ -13,13 +13,13 @@ designed to be exposed safely over [Tailscale](https://tailscale.com/).
   Updates every 2 seconds, no page reloads.
 - **10-minute history charts** — rendered with hand-rolled canvas charts (no chart library), with value and
   time axis labels.
-- **Services list** — auto-detects listening TCP ports and Docker port mappings, and turns them into
-  clickable links. Never forget which port a service lives on again.
+- **Services list** — auto-detects listening TCP ports and Docker port mappings, and turns them into clickable
+  links. Never forget which port a service lives on again.
 - **Docker containers** — state, CPU% and memory per container, straight from the Docker Engine API over the
   unix socket.
 - **Top processes** — top 10 by CPU with RSS.
-- **Eco mode by design** — when nobody is watching, process scanning, Docker polling and service discovery
-  all pause (≈0.2% CPU idle on a Raspberry Pi 4).
+- **Eco mode by design** — when nobody is watching, process scanning, Docker polling and service discovery all
+  pause (≈0.2% CPU idle on a Raspberry Pi 4).
 - **PWA-ready** — add to your phone's home screen for a full-screen, edge-to-edge experience.
 - **Tiny footprint** — a single Deno process, no database, no client-side dependencies. Frontend is plain
   HTML/CSS/JS.
@@ -38,8 +38,8 @@ The compose file uses:
 
 - `network_mode: host` + `pid: host` — so the dashboard reports **host** network/process metrics rather than
   the container's.
-- `cap_add: SYS_PTRACE` — needed only to resolve process names for the services list (reading other
-  processes' `/proc/<pid>/fd`). You can remove it; services will then show as `unknown`.
+- `cap_add: SYS_PTRACE` — needed only to resolve process names for the services list (reading other processes'
+  `/proc/<pid>/fd`). You can remove it; services will then show as `unknown`.
 - A read-only mount of the Docker socket — omit it and everything except the containers card still works.
 
 ## Expose over Tailscale
