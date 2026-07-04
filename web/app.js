@@ -3,7 +3,7 @@
 
 const $ = (s) => document.querySelector(s);
 let history = [];
-const MAX_POINTS = 5400;
+const MAX_POINTS = 300; // 2 秒間隔 × 300 = 直近 10 分
 
 // ---------- ユーティリティ ----------
 const fmtKB = (kb) => {
@@ -67,9 +67,8 @@ function drawChart(canvas, series, { min = 0, max = 100, colors = ["#58f6c4"], f
     ctx.fillText(fmtAxis(hi - ((hi - lo) / 4) * i), w - 4, y + 11);
   }
 
-  // x 軸ウィンドウはデータ量に応じて 10 分〜3 時間で伸びる
-  const len = Math.max(...series.map((d) => d.length));
-  const span = Math.max(300, Math.min(len, MAX_POINTS)) - 1;
+  // x 軸は直近 10 分の固定ウィンドウ
+  const span = MAX_POINTS - 1;
 
   // X 軸時刻（ウィンドウを 4 等分。データのある範囲のみ）
   if (times.length >= 2) {
@@ -153,6 +152,16 @@ function renderContainers(list, available) {
   </tr>`).join("") || `<tr><td colspan="5" class="empty">No containers</td></tr>`;
 }
 
+function renderServices(services) {
+  $("#svc-count").textContent = services.length || "";
+  // アクセス中のホスト名でリンクを組み立てる（LAN でも tailnet でもそのまま開ける）
+  $("#services").innerHTML = services.map((s) => {
+    const url = s.port === 443 ? `https://${location.hostname}` : `http://${location.hostname}:${s.port}`;
+    return `<a class="svc" href="${url}" target="_blank" rel="noopener">
+      ${esc(s.name)}<span class="port">:${s.port}</span><span class="src">${s.source}</span></a>`;
+  }).join("") || `<div class="empty">No listening services detected</div>`;
+}
+
 function renderProcs(procs) {
   $("#procs tbody").innerHTML = procs.map((p) => `<tr>
     <td>${p.pid}</td><td title="${esc(p.name)}">${esc(p.name)}</td>
@@ -185,6 +194,7 @@ function apply(s) {
   renderCores(s.cpu.perCore);
   renderContainers(s.containers ?? [], s.dockerAvailable);
   renderProcs(s.procs ?? []);
+  renderServices(s.services ?? []);
 }
 
 // ---------- SSE 接続（自動再接続つき） ----------

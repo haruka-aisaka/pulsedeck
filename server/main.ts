@@ -3,12 +3,14 @@
 
 import { Collector, Snapshot } from "./collectors.ts";
 import { ContainerInfo, listContainers } from "./docker.ts";
+import { listServices, ServiceInfo } from "./services.ts";
 
 const PORT = Number(Deno.env.get("PORT") ?? 8480);
 const TICK_MS = 2000;
 const PROC_EVERY_TICKS = 3; // プロセス走査は 6 秒ごと（全 /proc 走査は高コスト）
 const DOCKER_INTERVAL_MS = 10_000;
-const HISTORY_MAX = 5400; // 2 秒間隔 × 5400 = 3 時間
+const SERVICES_INTERVAL_MS = 60_000;
+const HISTORY_MAX = 300; // 2 秒間隔 × 300 = 直近 10 分
 
 interface HistoryPoint {
   t: number;
@@ -25,6 +27,7 @@ const clients = new Set<ReadableStreamDefaultController<Uint8Array>>();
 let latest: Snapshot | null = null;
 let containers: ContainerInfo[] = [];
 let dockerAvailable = true;
+let services: ServiceInfo[] = [];
 
 function broadcast(event: string, data: unknown) {
   const payload = new TextEncoder().encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -56,7 +59,7 @@ async function tick() {
       tx: latest.net.txKBs,
     });
     if (history.length > HISTORY_MAX) history.splice(0, history.length - HISTORY_MAX);
-    if (clients.size > 0) broadcast("snapshot", { ...latest, containers, dockerAvailable });
+    if (clients.size > 0) broadcast("snapshot", { ...latest, containers, dockerAvailable, services });
   } catch (e) {
     console.error("collect error:", e);
   }
@@ -73,9 +76,19 @@ async function dockerTick() {
   }
 }
 
+async function servicesTick() {
+  if (clients.size === 0) return;
+  try {
+    services = await listServices(containers);
+  } catch (e) {
+    console.error("services error:", e);
+  }
+}
+
 await tick(); // 1 回目は差分の基準づくり
 setInterval(tick, TICK_MS);
 setInterval(dockerTick, DOCKER_INTERVAL_MS);
+setInterval(servicesTick, SERVICES_INTERVAL_MS);
 
 const webRoot = new URL("../web/", import.meta.url);
 const MIME: Record<string, string> = {
@@ -94,12 +107,15 @@ Deno.serve({ port: PORT, hostname: "0.0.0.0" }, async (req) => {
       start(c) {
         ctrl = c;
         clients.add(c);
-        dockerTick(); // 接続直後にコンテナ情報を最新化（アイドル中は停止しているため）
+        // 接続直後にコンテナ・サービス情報を最新化（アイドル中は停止しているため）
+        dockerTick().then(servicesTick);
         const enc = new TextEncoder();
         c.enqueue(enc.encode(`event: history\ndata: ${JSON.stringify(history)}\n\n`));
         if (latest) {
           c.enqueue(enc.encode(
-            `event: snapshot\ndata: ${JSON.stringify({ ...latest, containers, dockerAvailable })}\n\n`,
+            `event: snapshot\ndata: ${
+              JSON.stringify({ ...latest, containers, dockerAvailable, services })
+            }\n\n`,
           ));
         }
       },
@@ -117,7 +133,7 @@ Deno.serve({ port: PORT, hostname: "0.0.0.0" }, async (req) => {
   }
 
   if (url.pathname === "/api/snapshot") {
-    return Response.json({ ...latest, containers, dockerAvailable, history });
+    return Response.json({ ...latest, containers, dockerAvailable, services, history });
   }
 
   // 静的ファイル配信

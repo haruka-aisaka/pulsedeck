@@ -6,6 +6,9 @@ services:
     # ホストのネットワーク統計・プロセス一覧を取得するため host 名前空間を共有する
     network_mode: host
     pid: host
+    # サービス一覧のプロセス名解決（他プロセスの /proc/[pid]/fd 読み取り）に必要
+    cap_add:
+      - SYS_PTRACE
     environment:
       - PORT=8480
       - HOST_ROOT=/host/root
