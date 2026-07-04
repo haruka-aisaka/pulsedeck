@@ -29,7 +29,13 @@ function setGauge(id, pct, text, sub, colorPct = pct) {
 }
 
 // ---------- チャート（Canvas 自作） ----------
-function drawChart(canvas, series, { min = 0, max = 100, colors = ["#58f6c4"], fill = true } = {}) {
+const fmtAxis = (v) => v >= 1000 ? (v / 1000).toFixed(1) + "k" : v >= 10 ? Math.round(v) : v.toFixed(1);
+const fmtTime = (t) => {
+  const d = new Date(t);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+};
+
+function drawChart(canvas, series, { min = 0, max = 100, colors = ["#58f6c4"], fill = true, times = [] } = {}) {
   const dpr = devicePixelRatio || 1;
   const w = canvas.clientWidth, h = canvas.clientHeight;
   if (!w) return;
@@ -38,6 +44,7 @@ function drawChart(canvas, series, { min = 0, max = 100, colors = ["#58f6c4"], f
   const ctx = canvas.getContext("2d");
   ctx.scale(dpr, dpr);
   ctx.clearRect(0, 0, w, h);
+  const ph = h - 14; // 下 14px は時刻ラベル領域
 
   // 動的レンジ（max が指定なしのとき）
   let lo = min, hi = max;
@@ -45,33 +52,54 @@ function drawChart(canvas, series, { min = 0, max = 100, colors = ["#58f6c4"], f
     hi = Math.max(1, ...series.flat().filter((v) => v != null)) * 1.15;
   }
 
-  // グリッド
-  ctx.strokeStyle = "rgba(255,255,255,0.06)";
+  // グリッドと Y 軸数値（各罫線の右端に値を表示）
   ctx.lineWidth = 1;
-  for (let i = 1; i <= 3; i++) {
-    const y = (h / 4) * i;
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+  ctx.font = "10px " + getComputedStyle(document.body).getPropertyValue("--mono");
+  for (let i = 0; i <= 3; i++) {
+    const y = (ph / 4) * i;
+    if (i > 0) {
+      ctx.strokeStyle = "rgba(255,255,255,0.06)";
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+    }
+    ctx.fillStyle = "rgba(125,138,165,0.85)";
+    ctx.textAlign = "right";
+    ctx.fillText(fmtAxis(hi - ((hi - lo) / 4) * i), w - 4, y + 11);
   }
 
   // x 軸ウィンドウはデータ量に応じて 10 分〜3 時間で伸びる
   const len = Math.max(...series.map((d) => d.length));
   const span = Math.max(300, Math.min(len, MAX_POINTS)) - 1;
+
+  // X 軸時刻（ウィンドウを 4 等分。データのある範囲のみ）
+  if (times.length >= 2) {
+    const stepMs = (times[times.length - 1] - times[0]) / (times.length - 1);
+    ctx.fillStyle = "rgba(125,138,165,0.7)";
+    for (let i = 0; i <= 4; i++) {
+      const x = (w / 4) * i;
+      const idx = (times.length - 1) - Math.round(((4 - i) / 4) * span);
+      // データがまだ無い左側の時間帯もサンプリング間隔から時刻を外挿して表示する
+      const t = idx >= 0 ? times[idx] : times[0] + idx * stepMs;
+      ctx.textAlign = i === 0 ? "left" : i === 4 ? "right" : "center";
+      ctx.fillText(fmtTime(t), Math.min(Math.max(x, 2), w - 2), h - 2);
+    }
+  }
+
   series.forEach((data, si) => {
     if (data.length < 2) return;
     const step = w / span;
     const x0 = w - (data.length - 1) * step; // 右端が最新
-    const toY = (v) => h - ((v - lo) / (hi - lo)) * (h - 6) - 3;
+    const toY = (v) => ph - ((v - lo) / (hi - lo)) * (ph - 6) - 3;
     ctx.beginPath();
     data.forEach((v, i) => {
       const x = x0 + i * step, y = toY(v ?? lo);
       i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     });
     if (fill) {
-      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      const grad = ctx.createLinearGradient(0, 0, 0, ph);
       grad.addColorStop(0, colors[si] + "55");
       grad.addColorStop(1, colors[si] + "00");
       ctx.save();
-      ctx.lineTo(w, h + 2); ctx.lineTo(x0, h + 2); ctx.closePath();
+      ctx.lineTo(w, ph); ctx.lineTo(x0, ph); ctx.closePath();
       ctx.fillStyle = grad;
       ctx.fill();
       ctx.restore();
@@ -89,11 +117,12 @@ function drawChart(canvas, series, { min = 0, max = 100, colors = ["#58f6c4"], f
 }
 
 function renderCharts() {
-  drawChart($("#c-cpu"), [history.map((p) => p.cpu)]);
-  drawChart($("#c-mem"), [history.map((p) => p.mem)], { colors: ["#6aa5ff"] });
-  drawChart($("#c-temp"), [history.map((p) => p.temp ?? 0)], { min: 20, max: 95, colors: ["#ffb454"] });
+  const times = history.map((p) => p.t);
+  drawChart($("#c-cpu"), [history.map((p) => p.cpu)], { times });
+  drawChart($("#c-mem"), [history.map((p) => p.mem)], { colors: ["#6aa5ff"], times });
+  drawChart($("#c-temp"), [history.map((p) => p.temp ?? 0)], { min: 20, max: 95, colors: ["#ffb454"], times });
   drawChart($("#c-net"), [history.map((p) => p.rx), history.map((p) => p.tx)], {
-    max: null, colors: ["#6aa5ff", "#58f6c4"],
+    max: null, colors: ["#6aa5ff", "#58f6c4"], times,
   });
 }
 
