@@ -38,12 +38,33 @@ function setGauge(id, pct, text, sub, colorPct = pct) {
 
 // ---------- チャート（Canvas 自作） ----------
 const fmtAxis = (v) =>
-  v >= 1000 ? (v / 1000).toFixed(1) + "k" : v >= 10 ? Math.round(v) : v >= 1 ? v.toFixed(1) : v.toFixed(2);
+  v === 0
+    ? "0"
+    : v >= 1000
+    ? (v / 1000).toFixed(1) + "k"
+    : v >= 10
+    ? Math.round(v)
+    : v >= 1
+    ? v.toFixed(1)
+    : v.toFixed(2);
 const fmtTime = (t, withSec = false) => {
   const d = new Date(t);
   const hm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   return withSec ? `${hm}:${String(d.getSeconds()).padStart(2, "0")}` : hm;
 };
+
+// 1 / 2 / 2.5 / 5 × 10^n 系列から、約 4 分割になるキリのいい刻みを選ぶ
+function niceStep(range) {
+  const raw = range / 4;
+  const pow = 10 ** Math.floor(Math.log10(raw));
+  for (const b of [1, 2, 2.5, 5]) {
+    if (b * pow >= raw) return b * pow;
+  }
+  return 10 * pow;
+}
+
+// X 軸の時刻刻み候補（秒）。ウィンドウ幅 / 4 以上の最小のものを選ぶ
+const TIME_STEPS = [5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 10800, 21600];
 
 function drawChart(
   canvas,
@@ -67,37 +88,50 @@ function drawChart(
     hi = Math.max(1, ...series.flat().filter((v) => v != null)) * 1.15;
   }
 
-  // グリッドと Y 軸数値（各罫線の右端に値を表示）
+  const style = getComputedStyle(document.documentElement);
+  const cssVar = (n) => style.getPropertyValue(n).trim();
+  const toY = (v) => ph - ((v - lo) / (hi - lo)) * (ph - 6) - 3;
+
+  // Y 軸: キリのいい値の位置に罫線とラベルを引く
   ctx.lineWidth = 1;
-  ctx.font = "10px " + getComputedStyle(document.body).getPropertyValue("--mono");
-  for (let i = 0; i <= 3; i++) {
-    const y = (ph / 4) * i;
-    if (i > 0) {
-      ctx.strokeStyle = "rgba(255,255,255,0.06)";
+  ctx.font = "10px " + cssVar("--mono");
+  const yStep = niceStep(hi - lo);
+  for (let v = Math.ceil(lo / yStep) * yStep; v <= hi + 1e-9; v += yStep) {
+    const y = toY(v);
+    if (v > lo && y > 6) {
+      ctx.strokeStyle = cssVar("--grid-line");
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(w, y);
       ctx.stroke();
     }
-    ctx.fillStyle = "rgba(125,138,165,0.85)";
-    ctx.textAlign = "right";
-    ctx.fillText(fmtAxis(hi - ((hi - lo) / 4) * i), w - 4, y + 11);
+    if (y >= 12 && y <= ph) {
+      ctx.fillStyle = cssVar("--axis-label");
+      ctx.textAlign = "right";
+      ctx.fillText(fmtAxis(v), w - 4, y - 3);
+    }
   }
 
   // x 軸は表示レンジ分の固定ウィンドウ
   const span = points - 1;
 
-  // X 軸時刻（ウィンドウを 4 等分。データのある範囲のみ）
+  // X 軸: 切りのいい時刻境界（ローカルタイム整列）にラベルを置く
   if (times.length >= 2) {
     const stepMs = (times[times.length - 1] - times[0]) / (times.length - 1);
-    const withSec = stepMs * span < 300_000; // 5 分未満のウィンドウは秒まで表示
-    ctx.fillStyle = "rgba(125,138,165,0.7)";
-    for (let i = 0; i <= 4; i++) {
-      const x = (w / 4) * i;
-      const idx = (times.length - 1) - Math.round(((4 - i) / 4) * span);
-      // データがまだ無い左側の時間帯もサンプリング間隔から時刻を外挿して表示する
-      const t = idx >= 0 ? times[idx] : times[0] + idx * stepMs;
-      ctx.textAlign = i === 0 ? "left" : i === 4 ? "right" : "center";
+    const windowMs = stepMs * span;
+    const tickMs = (TIME_STEPS.find((s) => s * 1000 >= windowMs / 4) ?? 21600) * 1000;
+    const withSec = tickMs < 60_000;
+    const tEnd = times[times.length - 1];
+    const tStart = tEnd - windowMs;
+    const tzOff = new Date(tEnd).getTimezoneOffset() * 60_000;
+    ctx.fillStyle = cssVar("--axis-time");
+    for (
+      let t = Math.ceil((tStart - tzOff) / tickMs) * tickMs + tzOff;
+      t <= tEnd;
+      t += tickMs
+    ) {
+      const x = ((t - tStart) / windowMs) * w;
+      ctx.textAlign = x < 20 ? "left" : x > w - 20 ? "right" : "center";
       ctx.fillText(fmtTime(t, withSec), Math.min(Math.max(x, 2), w - 2), h - 2);
     }
   }
@@ -106,7 +140,6 @@ function drawChart(
     if (data.length < 2) return;
     const step = w / span;
     const x0 = w - (data.length - 1) * step; // 右端が最新
-    const toY = (v) => ph - ((v - lo) / (hi - lo)) * (ph - 6) - 3;
     ctx.beginPath();
     data.forEach((v, i) => {
       const x = x0 + i * step, y = toY(v ?? lo);
@@ -141,19 +174,24 @@ function renderCharts() {
   const history = (histories[view.src] ?? []).slice(-view.points);
   const times = history.map((p) => p.t);
   const points = view.points;
-  drawChart($("#c-cpu"), [history.map((p) => p.cpu)], { times, points });
-  drawChart($("#c-mem"), [history.map((p) => p.mem)], { colors: ["#6aa5ff"], times, points });
+  // 線の色はテーマ変数から取得（fill のグラデーション合成のため hex 形式で定義してある）
+  const style = getComputedStyle(document.documentElement);
+  const accent = style.getPropertyValue("--accent").trim();
+  const accent2 = style.getPropertyValue("--accent2").trim();
+  const warn = style.getPropertyValue("--warn").trim();
+  drawChart($("#c-cpu"), [history.map((p) => p.cpu)], { colors: [accent], times, points });
+  drawChart($("#c-mem"), [history.map((p) => p.mem)], { colors: [accent2], times, points });
   drawChart($("#c-temp"), [history.map((p) => p.temp ?? 0)], {
     min: 20,
     max: 95,
-    colors: ["#ffb454"],
+    colors: [warn],
     times,
     points,
   });
   // サーバーは KB/s で送ってくるため MB/s に換算して描画する
   drawChart($("#c-net"), [history.map((p) => p.rx / 1024), history.map((p) => p.tx / 1024)], {
     max: null,
-    colors: ["#6aa5ff", "#58f6c4"],
+    colors: [accent2, accent],
     times,
     points,
   });
@@ -304,6 +342,37 @@ document.querySelectorAll(".range-toggle button").forEach((btn) => {
     renderCharts();
   });
 });
+
+// ---------- テーマ (auto → light → dark) ----------
+const THEME_MODES = ["auto", "light", "dark"];
+const prefersLight = matchMedia("(prefers-color-scheme: light)");
+let themeMode = "auto";
+try {
+  themeMode = localStorage.getItem("theme") ?? "auto";
+} catch { /* localStorage 不可の環境では auto 固定 */ }
+
+function applyTheme() {
+  const resolved = themeMode === "auto" ? (prefersLight.matches ? "light" : "dark") : themeMode;
+  document.documentElement.dataset.theme = resolved;
+  $("#theme-btn").textContent = themeMode;
+  // モバイルのステータスバー色もテーマに追従させる
+  document.querySelector('meta[name="theme-color"]').content = getComputedStyle(
+    document.documentElement,
+  ).getPropertyValue("--bg1").trim();
+  renderCharts();
+}
+
+$("#theme-btn").addEventListener("click", () => {
+  themeMode = THEME_MODES[(THEME_MODES.indexOf(themeMode) + 1) % THEME_MODES.length];
+  try {
+    localStorage.setItem("theme", themeMode);
+  } catch { /* 保存できなくても動作は継続 */ }
+  applyTheme();
+});
+prefersLight.addEventListener("change", () => {
+  if (themeMode === "auto") applyTheme();
+});
+applyTheme();
 
 connect();
 addEventListener("resize", renderCharts);

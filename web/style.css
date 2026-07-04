@@ -1,4 +1,4 @@
-/* PulseDeck — ダークグラス UI */
+/* PulseDeck — ダークグラス UI（テーマは JS が html[data-theme] に light/dark を設定する） */
 :root {
   --bg0: #070b14;
   --bg1: #0d1220;
@@ -10,7 +10,37 @@
   --accent2: #6aa5ff;
   --warn: #ffb454;
   --danger: #ff5d7a;
+  --glow1: rgba(106, 165, 255, 0.14);
+  --glow2: rgba(88, 246, 196, 0.1);
+  --grid-line: rgba(255, 255, 255, 0.06);
+  --axis-label: rgba(125, 138, 165, 0.85);
+  --axis-time: rgba(125, 138, 165, 0.7);
+  --th-bg: #11182a;
+  --on-text: #04120c;
+  --header-bg: rgba(13, 18, 32, 0.7);
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
   --mono: "SFMono-Regular", ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace;
+}
+[data-theme="light"] {
+  --bg0: #eef1f7;
+  --bg1: #f7f9fc;
+  --card: rgba(255, 255, 255, 0.75);
+  --card-border: rgba(15, 30, 60, 0.1);
+  --text: #1a2233;
+  --muted: #5b6b85;
+  --accent: #0ca678;
+  --accent2: #2f6fe4;
+  --warn: #d97706;
+  --danger: #dc2626;
+  --glow1: rgba(47, 111, 228, 0.08);
+  --glow2: rgba(12, 166, 120, 0.07);
+  --grid-line: rgba(15, 30, 60, 0.08);
+  --axis-label: rgba(70, 85, 110, 0.9);
+  --axis-time: rgba(70, 85, 110, 0.75);
+  --th-bg: #e7ecf4;
+  --on-text: #ffffff;
+  --header-bg: rgba(247, 249, 252, 0.8);
+  --shadow: 0 6px 20px rgba(20, 40, 80, 0.08);
 }
 * {
   box-sizing: border-box;
@@ -22,8 +52,8 @@ html {
 }
 body {
   background:
-    radial-gradient(1100px 500px at 15% -10%, rgba(106, 165, 255, 0.14), transparent 60%),
-    radial-gradient(900px 500px at 90% 0%, rgba(88, 246, 196, 0.10), transparent 55%),
+    radial-gradient(1100px 500px at 15% -10%, var(--glow1), transparent 60%),
+    radial-gradient(900px 500px at 90% 0%, var(--glow2), transparent 55%),
     linear-gradient(180deg, var(--bg1), var(--bg0) 40%);
   min-height: 100vh;
   color: var(--text);
@@ -42,7 +72,7 @@ header {
   position: sticky;
   top: 0;
   z-index: 5;
-  background: rgba(13, 18, 32, 0.7);
+  background: var(--header-bg);
 }
 .brand {
   display: flex;
@@ -72,6 +102,21 @@ h1 {
 }
 .sep {
   opacity: 0.4;
+}
+.theme-btn {
+  padding: 5px 12px;
+  font: 11px var(--mono);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.theme-btn:hover {
+  border-color: var(--accent);
+  color: var(--text);
 }
 .conn {
   margin-left: auto;
@@ -116,7 +161,7 @@ main {
   border: 1px solid var(--card-border);
   border-radius: 16px;
   padding: 16px 18px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--shadow);
 }
 h2 {
   font-size: 13px;
@@ -229,7 +274,7 @@ h2 {
   border-radius: 0 8px 8px 0;
 }
 .range-toggle button.on {
-  color: #04120c;
+  color: var(--on-text);
   background: var(--accent);
   border-color: var(--accent);
   font-weight: 700;
@@ -272,7 +317,7 @@ th {
   border-bottom: 1px solid var(--card-border);
   position: sticky;
   top: 0;
-  background: #11182a;
+  background: var(--th-bg);
 }
 td {
   padding: 6px 8px;
