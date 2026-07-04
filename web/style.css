@@ -13,6 +13,8 @@
   --mono: "SFMono-Regular", ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace;
 }
 * { box-sizing: border-box; margin: 0; }
+/* edge to edge: ステータスバー裏やオーバースクロール領域に白が出ないよう最背面も暗くする */
+html { background: var(--bg1); }
 body {
   background:
     radial-gradient(1100px 500px at 15% -10%, rgba(106, 165, 255, 0.14), transparent 60%),
