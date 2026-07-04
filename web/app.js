@@ -115,7 +115,7 @@ function renderContainers(list, available) {
   }
   tbody.innerHTML = list.map((c) => `<tr>
     <td title="${esc(c.name)}">${esc(c.name)}</td>
-    <td title="${esc(c.image)}">${esc(c.image)}</td>
+    <td class="col-img" title="${esc(c.image)}">${esc(c.image)}</td>
     <td><span class="state ${esc(c.state)}">${esc(c.state)}</span></td>
     <td class="r">${c.cpu == null ? "—" : c.cpu.toFixed(1)}</td>
     <td class="r">${c.memUsedMB == null ? "—" : c.memUsedMB.toFixed(0) + " MB"}</td>
