@@ -7,12 +7,18 @@ designed to be exposed safely over [Tailscale](https://tailscale.com/).
 
 ![Desktop screenshot](docs/images/desktop.png)
 
+<p align="center">
+  <img src="docs/images/light.png" alt="Light theme" width="68%">
+  <img src="docs/images/mobile.png" alt="Mobile" width="23%">
+</p>
+
 ## Features
 
 - **Live metrics via SSE** — CPU, memory, CPU temperature, disk, network throughput, load average, uptime.
   Updates every 2 seconds, no page reloads.
-- **10-minute history charts** — rendered with hand-rolled canvas charts (no chart library), with value and
-  time axis labels.
+- **History charts with range toggle** — 1 min / 10 min / 3 h / 24 h, downsampled server-side so every range
+  costs the same fixed 300 points. Hand-rolled canvas charts, no chart library, with nice-value axis ticks.
+- **Light / dark themes** — auto (follows the OS), or force light/dark. Persisted across reloads.
 - **Services list** — auto-detects listening TCP ports and Docker port mappings, and turns them into clickable
   links. Never forget which port a service lives on again.
 - **Docker containers** — state, CPU% and memory per container, straight from the Docker Engine API over the
