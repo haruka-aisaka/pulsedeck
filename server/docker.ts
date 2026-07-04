@@ -103,7 +103,11 @@ export async function listContainers(): Promise<ContainerInfo[]> {
     cpu: stats.get(c.Id)?.cpu ?? null,
     memUsedMB: stats.get(c.Id)?.memUsedMB ?? null,
     memLimitMB: stats.get(c.Id)?.memLimitMB ?? null,
-    // deno-lint-ignore no-explicit-any
-    ports: [...new Set((c.Ports ?? []).filter((p: any) => p.PublicPort && p.Type === "tcp").map((p: any) => p.PublicPort as number))],
+    ports: [
+      ...new Set<number>(
+        // deno-lint-ignore no-explicit-any
+        (c.Ports ?? []).filter((p: any) => p.PublicPort && p.Type === "tcp").map((p: any) => p.PublicPort),
+      ),
+    ],
   }));
 }

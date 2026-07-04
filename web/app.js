@@ -15,8 +15,7 @@ const fmtUptime = (s) => {
   const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
   return d > 0 ? `${d}d ${h}h` : h > 0 ? `${h}h ${m}m` : `${m}m`;
 };
-const levelColor = (pct) =>
-  pct >= 90 ? "var(--danger)" : pct >= 70 ? "var(--warn)" : "var(--accent)";
+const levelColor = (pct) => pct >= 90 ? "var(--danger)" : pct >= 70 ? "var(--warn)" : "var(--accent)";
 
 // ---------- ゲージ ----------
 function setGauge(id, pct, text, sub, colorPct = pct) {
@@ -36,7 +35,11 @@ const fmtTime = (t) => {
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 };
 
-function drawChart(canvas, series, { min = 0, max = 100, colors = ["#58f6c4"], fill = true, times = [] } = {}) {
+function drawChart(
+  canvas,
+  series,
+  { min = 0, max = 100, colors = ["#58f6c4"], fill = true, times = [] } = {},
+) {
   const dpr = devicePixelRatio || 1;
   const w = canvas.clientWidth, h = canvas.clientHeight;
   if (!w) return;
@@ -48,7 +51,8 @@ function drawChart(canvas, series, { min = 0, max = 100, colors = ["#58f6c4"], f
   const ph = h - 14; // 下 14px は時刻ラベル領域
 
   // 動的レンジ（max が指定なしのとき）
-  let lo = min, hi = max;
+  const lo = min;
+  let hi = max;
   if (max === null) {
     hi = Math.max(1, ...series.flat().filter((v) => v != null)) * 1.15;
   }
@@ -60,7 +64,10 @@ function drawChart(canvas, series, { min = 0, max = 100, colors = ["#58f6c4"], f
     const y = (ph / 4) * i;
     if (i > 0) {
       ctx.strokeStyle = "rgba(255,255,255,0.06)";
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(w, y);
+      ctx.stroke();
     }
     ctx.fillStyle = "rgba(125,138,165,0.85)";
     ctx.textAlign = "right";
@@ -99,7 +106,9 @@ function drawChart(canvas, series, { min = 0, max = 100, colors = ["#58f6c4"], f
       grad.addColorStop(0, colors[si] + "55");
       grad.addColorStop(1, colors[si] + "00");
       ctx.save();
-      ctx.lineTo(w, ph); ctx.lineTo(x0, ph); ctx.closePath();
+      ctx.lineTo(w, ph);
+      ctx.lineTo(x0, ph);
+      ctx.closePath();
       ctx.fillStyle = grad;
       ctx.fill();
       ctx.restore();
@@ -120,36 +129,50 @@ function renderCharts() {
   const times = history.map((p) => p.t);
   drawChart($("#c-cpu"), [history.map((p) => p.cpu)], { times });
   drawChart($("#c-mem"), [history.map((p) => p.mem)], { colors: ["#6aa5ff"], times });
-  drawChart($("#c-temp"), [history.map((p) => p.temp ?? 0)], { min: 20, max: 95, colors: ["#ffb454"], times });
+  drawChart($("#c-temp"), [history.map((p) => p.temp ?? 0)], {
+    min: 20,
+    max: 95,
+    colors: ["#ffb454"],
+    times,
+  });
   // サーバーは KB/s で送ってくるため MB/s に換算して描画する
   drawChart($("#c-net"), [history.map((p) => p.rx / 1024), history.map((p) => p.tx / 1024)], {
-    max: null, colors: ["#6aa5ff", "#58f6c4"], times,
+    max: null,
+    colors: ["#6aa5ff", "#58f6c4"],
+    times,
   });
 }
 
 // ---------- テーブル・コア ----------
-const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const esc = (s) =>
+  s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 function renderCores(perCore) {
   $("#cores").innerHTML = perCore.map((u, i) =>
-    `<div class="core"><span>core${i}</span><div class="bar"><i style="width:${u.toFixed(1)}%"></i></div><span class="pct">${u.toFixed(0)}%</span></div>`
+    `<div class="core"><span>core${i}</span><div class="bar"><i style="width:${
+      u.toFixed(1)
+    }%"></i></div><span class="pct">${u.toFixed(0)}%</span></div>`
   ).join("");
 }
 
 function renderContainers(list, available) {
-  $("#ct-count").textContent = available ? `${list.filter((c) => c.state === "running").length}/${list.length}` : "";
+  $("#ct-count").textContent = available
+    ? `${list.filter((c) => c.state === "running").length}/${list.length}`
+    : "";
   const tbody = $("#containers tbody");
   if (!available) {
     tbody.innerHTML = `<tr><td colspan="5" class="empty">Docker socket not available</td></tr>`;
     return;
   }
-  tbody.innerHTML = list.map((c) => `<tr>
+  tbody.innerHTML = list.map((c) =>
+    `<tr>
     <td title="${esc(c.name)}">${esc(c.name)}</td>
     <td class="col-img" title="${esc(c.image)}">${esc(c.image)}</td>
     <td><span class="state ${esc(c.state)}">${esc(c.state)}</span></td>
     <td class="r">${c.cpu == null ? "—" : c.cpu.toFixed(1)}</td>
     <td class="r">${c.memUsedMB == null ? "—" : c.memUsedMB.toFixed(0) + " MB"}</td>
-  </tr>`).join("") || `<tr><td colspan="5" class="empty">No containers</td></tr>`;
+  </tr>`
+  ).join("") || `<tr><td colspan="5" class="empty">No containers</td></tr>`;
 }
 
 function renderServices(services) {
@@ -163,10 +186,12 @@ function renderServices(services) {
 }
 
 function renderProcs(procs) {
-  $("#procs tbody").innerHTML = procs.map((p) => `<tr>
+  $("#procs tbody").innerHTML = procs.map((p) =>
+    `<tr>
     <td>${p.pid}</td><td title="${esc(p.name)}">${esc(p.name)}</td>
     <td class="r">${p.cpu.toFixed(1)}</td><td class="r">${fmtKB(p.rssKB)}</td>
-  </tr>`).join("");
+  </tr>`
+  ).join("");
 }
 
 // ---------- スナップショット適用 ----------
@@ -176,18 +201,46 @@ function apply(s) {
   $("#uptime").textContent = fmtUptime(s.uptimeSec);
   $("#load").textContent = s.load.map((v) => v.toFixed(2)).join(" ");
 
-  setGauge("#g-cpu", s.cpu.usage, s.cpu.usage.toFixed(0) + "%", `${s.cpu.cores} cores · load ${s.load[0].toFixed(2)}`);
-  setGauge("#g-mem", s.mem.usage, s.mem.usage.toFixed(0) + "%", `${fmtKB(s.mem.usedKB)} / ${fmtKB(s.mem.totalKB)}`);
+  setGauge(
+    "#g-cpu",
+    s.cpu.usage,
+    s.cpu.usage.toFixed(0) + "%",
+    `${s.cpu.cores} cores · load ${s.load[0].toFixed(2)}`,
+  );
+  setGauge(
+    "#g-mem",
+    s.mem.usage,
+    s.mem.usage.toFixed(0) + "%",
+    `${fmtKB(s.mem.usedKB)} / ${fmtKB(s.mem.totalKB)}`,
+  );
   if (s.cpu.tempC != null) {
-    setGauge("#g-temp", (s.cpu.tempC / 90) * 100, s.cpu.tempC.toFixed(1) + "°", "throttle @ 85°C", (s.cpu.tempC / 90) * 100);
+    setGauge(
+      "#g-temp",
+      (s.cpu.tempC / 90) * 100,
+      s.cpu.tempC.toFixed(1) + "°",
+      "throttle @ 85°C",
+      (s.cpu.tempC / 90) * 100,
+    );
   } else {
     setGauge("#g-temp", 0, "—", "no sensor");
   }
-  setGauge("#g-disk", s.disk.usage, s.disk.usage.toFixed(0) + "%", `${fmtKB(s.disk.usedKB)} / ${fmtKB(s.disk.totalKB)}`);
+  setGauge(
+    "#g-disk",
+    s.disk.usage,
+    s.disk.usage.toFixed(0) + "%",
+    `${fmtKB(s.disk.usedKB)} / ${fmtKB(s.disk.totalKB)}`,
+  );
 
   // 初回受信は history イベント済み分と重複するため t で弾く
   if (!history.length || history[history.length - 1].t < s.t) {
-    history.push({ t: s.t, cpu: s.cpu.usage, mem: s.mem.usage, temp: s.cpu.tempC, rx: s.net.rxKBs, tx: s.net.txKBs });
+    history.push({
+      t: s.t,
+      cpu: s.cpu.usage,
+      mem: s.mem.usage,
+      temp: s.cpu.tempC,
+      rx: s.net.rxKBs,
+      tx: s.net.txKBs,
+    });
   }
   if (history.length > MAX_POINTS) history.splice(0, history.length - MAX_POINTS);
   renderCharts();
