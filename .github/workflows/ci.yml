@@ -13,7 +13,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: denoland/setup-deno@v2
         with:
-          deno-version: v2.x
+          # Dockerfile のベースイメージと同じバージョンに固定（fmt の挙動差を防ぐ）
+          deno-version: "2.3.6"
       - name: Format check
         run: deno fmt --check
       - name: Lint
