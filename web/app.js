@@ -345,6 +345,18 @@ document.querySelectorAll(".range-toggle button").forEach((btn) => {
 
 // ---------- テーマ (auto → light → dark) ----------
 const THEME_MODES = ["auto", "light", "dark"];
+// ボタン用アイコン（stroke は currentColor でテーマに追従）
+const THEME_ICONS = {
+  // 半分塗りの円 = OS 追従
+  auto:
+    '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3 a9 9 0 0 1 0 18 z" fill="currentColor" stroke="none"/></svg>',
+  // 太陽
+  light:
+    '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/></svg>',
+  // 月
+  dark:
+    '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4 7 7 0 0 0 20 14.5z"/></svg>',
+};
 const prefersLight = matchMedia("(prefers-color-scheme: light)");
 let themeMode = "auto";
 try {
@@ -354,7 +366,7 @@ try {
 function applyTheme() {
   const resolved = themeMode === "auto" ? (prefersLight.matches ? "light" : "dark") : themeMode;
   document.documentElement.dataset.theme = resolved;
-  $("#theme-btn").textContent = themeMode;
+  $("#theme-btn").innerHTML = `${THEME_ICONS[themeMode]}<span>${themeMode}</span>`;
   // モバイルのステータスバー色もテーマに追従させる
   document.querySelector('meta[name="theme-color"]').content = getComputedStyle(
     document.documentElement,

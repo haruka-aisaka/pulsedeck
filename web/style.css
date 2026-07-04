@@ -104,6 +104,9 @@ h1 {
   opacity: 0.4;
 }
 .theme-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 5px 12px;
   font: 11px var(--mono);
   letter-spacing: 1px;
