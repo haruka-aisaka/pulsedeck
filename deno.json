@@ -1,0 +1,9 @@
+{
+  "tasks": {
+    "start": "deno run --allow-all server/main.ts",
+    "dev": "deno run --watch --allow-all server/main.ts"
+  },
+  "fmt": {
+    "lineWidth": 110
+  }
+}
