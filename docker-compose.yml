@@ -1,0 +1,14 @@
+services:
+  pulsedeck:
+    build: .
+    container_name: pulsedeck
+    restart: unless-stopped
+    # ホストのネットワーク統計・プロセス一覧を取得するため host 名前空間を共有する
+    network_mode: host
+    pid: host
+    environment:
+      - PORT=8480
+      - HOST_ROOT=/host/root
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /:/host/root:ro
