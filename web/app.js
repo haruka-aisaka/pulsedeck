@@ -29,7 +29,8 @@ function setGauge(id, pct, text, sub, colorPct = pct) {
 }
 
 // ---------- チャート（Canvas 自作） ----------
-const fmtAxis = (v) => v >= 1000 ? (v / 1000).toFixed(1) + "k" : v >= 10 ? Math.round(v) : v.toFixed(1);
+const fmtAxis = (v) =>
+  v >= 1000 ? (v / 1000).toFixed(1) + "k" : v >= 10 ? Math.round(v) : v >= 1 ? v.toFixed(1) : v.toFixed(2);
 const fmtTime = (t) => {
   const d = new Date(t);
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
@@ -121,7 +122,8 @@ function renderCharts() {
   drawChart($("#c-cpu"), [history.map((p) => p.cpu)], { times });
   drawChart($("#c-mem"), [history.map((p) => p.mem)], { colors: ["#6aa5ff"], times });
   drawChart($("#c-temp"), [history.map((p) => p.temp ?? 0)], { min: 20, max: 95, colors: ["#ffb454"], times });
-  drawChart($("#c-net"), [history.map((p) => p.rx), history.map((p) => p.tx)], {
+  // サーバーは KB/s で送ってくるため MB/s に換算して描画する
+  drawChart($("#c-net"), [history.map((p) => p.rx / 1024), history.map((p) => p.tx / 1024)], {
     max: null, colors: ["#6aa5ff", "#58f6c4"], times,
   });
 }
