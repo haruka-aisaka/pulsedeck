@@ -58,19 +58,26 @@ async function request(path: string): Promise<unknown> {
   }
 }
 
+// one-shot 統計の CPU% 算出用に前回サンプルを保持する（daemon 側の 1 秒サンプリングを避ける）
+const prevCpuSample = new Map<string, { total: number; system: number }>();
+
 export async function listContainers(): Promise<ContainerInfo[]> {
   // deno-lint-ignore no-explicit-any
   const list = await request("/v1.43/containers/json?all=1") as any[];
   const running = list.filter((c) => c.State === "running");
-  const stats = new Map<string, { cpu: number; memUsedMB: number; memLimitMB: number }>();
+  const stats = new Map<string, { cpu: number | null; memUsedMB: number; memLimitMB: number }>();
   await Promise.all(running.map(async (c) => {
     try {
       // deno-lint-ignore no-explicit-any
-      const s = await request(`/v1.43/containers/${c.Id}/stats?stream=false`) as any;
-      const cpuDelta = s.cpu_stats.cpu_usage.total_usage - s.precpu_stats.cpu_usage.total_usage;
-      const sysDelta = s.cpu_stats.system_cpu_usage - (s.precpu_stats.system_cpu_usage ?? 0);
+      const s = await request(`/v1.43/containers/${c.Id}/stats?stream=false&one-shot=true`) as any;
+      const total = s.cpu_stats.cpu_usage.total_usage;
+      const system = s.cpu_stats.system_cpu_usage ?? 0;
       const cores = s.cpu_stats.online_cpus || 1;
-      const cpu = sysDelta > 0 ? (cpuDelta / sysDelta) * cores * 100 : 0;
+      const prev = prevCpuSample.get(c.Id);
+      prevCpuSample.set(c.Id, { total, system });
+      const cpu = prev && system > prev.system
+        ? ((total - prev.total) / (system - prev.system)) * cores * 100
+        : null; // 初回は差分が取れないため非表示
       const memUsed = (s.memory_stats.usage ?? 0) - (s.memory_stats.stats?.inactive_file ?? 0);
       stats.set(c.Id, {
         cpu,
@@ -81,6 +88,11 @@ export async function listContainers(): Promise<ContainerInfo[]> {
       // 統計が取れないコンテナは null のまま表示する
     }
   }));
+  // 消えたコンテナのサンプルを掃除
+  const alive = new Set(running.map((c) => c.Id));
+  for (const id of prevCpuSample.keys()) {
+    if (!alive.has(id)) prevCpuSample.delete(id);
+  }
   return list.map((c) => ({
     id: c.Id.slice(0, 12),
     name: (c.Names?.[0] ?? "").replace(/^\//, ""),

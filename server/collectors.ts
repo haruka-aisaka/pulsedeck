@@ -39,13 +39,16 @@ function parseCpuLine(fields: string[]): CpuSample {
   return { total, idle };
 }
 
+const DISK_CACHE_MS = 30_000; // df は fork を伴うため 30 秒キャッシュ
+
 export class Collector {
   #prevCpu: CpuSample[] = [];
   #prevNet: { rx: number; tx: number; t: number } | null = null;
   #prevProcCpu = new Map<number, number>();
   #prevProcT = 0;
+  #diskCache: { disk: Snapshot["disk"]; t: number } | null = null;
 
-  async snapshot(): Promise<Snapshot> {
+  async snapshot(includeProcs = true): Promise<Snapshot> {
     const now = Date.now();
     const [stat, meminfo, loadavg, uptime, netdev] = await Promise.all([
       readText("/proc/stat"),
@@ -86,16 +89,19 @@ export class Collector {
       // 温度センサーがない環境では非表示にする
     }
 
-    // --- ディスク（ホストルートを df で取得） ---
-    let disk = { totalKB: 0, usedKB: 0, usage: 0, mount: HOST_ROOT };
-    try {
-      const out = await new Deno.Command("df", { args: ["-kP", HOST_ROOT] }).output();
-      const row = new TextDecoder().decode(out.stdout).trim().split("\n").at(-1)!.split(/\s+/);
-      const totalKB = Number(row[1]);
-      const usedKB = Number(row[2]);
-      disk = { totalKB, usedKB, usage: totalKB > 0 ? (usedKB / totalKB) * 100 : 0, mount: HOST_ROOT };
-    } catch {
-      // df がない環境では 0 のまま
+    // --- ディスク（ホストルートを df で取得。fork コスト削減のためキャッシュ） ---
+    let disk = this.#diskCache?.disk ?? { totalKB: 0, usedKB: 0, usage: 0, mount: HOST_ROOT };
+    if (!this.#diskCache || now - this.#diskCache.t > DISK_CACHE_MS) {
+      try {
+        const out = await new Deno.Command("df", { args: ["-kP", HOST_ROOT] }).output();
+        const row = new TextDecoder().decode(out.stdout).trim().split("\n").at(-1)!.split(/\s+/);
+        const totalKB = Number(row[1]);
+        const usedKB = Number(row[2]);
+        disk = { totalKB, usedKB, usage: totalKB > 0 ? (usedKB / totalKB) * 100 : 0, mount: HOST_ROOT };
+      } catch {
+        // df がない環境では 0 のまま
+      }
+      this.#diskCache = { disk, t: now };
     }
 
     // --- ネットワーク（lo 以外の合算） ---
@@ -117,7 +123,7 @@ export class Collector {
     }
     this.#prevNet = { rx, tx, t: now };
 
-    const procs = await this.#topProcs(now);
+    const procs = includeProcs ? await this.topProcs(now) : [];
 
     return {
       t: now,
@@ -140,7 +146,7 @@ export class Collector {
   }
 
   // CPU 使用率 Top 10 プロセス（前回サンプルとの差分から算出）
-  async #topProcs(now: number): Promise<ProcInfo[]> {
+  async topProcs(now: number): Promise<ProcInfo[]> {
     const pageKB = 4; // Linux の標準ページサイズ 4KiB
     const results: { pid: number; name: string; ticks: number; rssKB: number }[] = [];
     for await (const e of Deno.readDir("/proc")) {

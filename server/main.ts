@@ -6,6 +6,7 @@ import { ContainerInfo, listContainers } from "./docker.ts";
 
 const PORT = Number(Deno.env.get("PORT") ?? 8480);
 const TICK_MS = 2000;
+const PROC_EVERY_TICKS = 3; // プロセス走査は 6 秒ごと（全 /proc 走査は高コスト）
 const DOCKER_INTERVAL_MS = 10_000;
 const HISTORY_MAX = 5400; // 2 秒間隔 × 5400 = 3 時間
 
@@ -36,9 +37,16 @@ function broadcast(event: string, data: unknown) {
   }
 }
 
+let tickCount = 0;
+let lastProcs: Snapshot["procs"] = [];
+
 async function tick() {
   try {
-    latest = await collector.snapshot();
+    // 閲覧者がいない間はプロセス走査を止め、基本メトリクスのみ履歴用に収集する
+    const wantProcs = clients.size > 0 && tickCount++ % PROC_EVERY_TICKS === 0;
+    latest = await collector.snapshot(wantProcs);
+    if (wantProcs) lastProcs = latest.procs;
+    else latest.procs = lastProcs;
     history.push({
       t: latest.t,
       cpu: latest.cpu.usage,
@@ -48,13 +56,14 @@ async function tick() {
       tx: latest.net.txKBs,
     });
     if (history.length > HISTORY_MAX) history.splice(0, history.length - HISTORY_MAX);
-    broadcast("snapshot", { ...latest, containers, dockerAvailable });
+    if (clients.size > 0) broadcast("snapshot", { ...latest, containers, dockerAvailable });
   } catch (e) {
     console.error("collect error:", e);
   }
 }
 
 async function dockerTick() {
+  if (clients.size === 0) return; // 閲覧者がいない間は dockerd に負荷をかけない
   try {
     containers = await listContainers();
     dockerAvailable = true;
@@ -64,7 +73,6 @@ async function dockerTick() {
   }
 }
 
-await dockerTick();
 await tick(); // 1 回目は差分の基準づくり
 setInterval(tick, TICK_MS);
 setInterval(dockerTick, DOCKER_INTERVAL_MS);
@@ -86,6 +94,7 @@ Deno.serve({ port: PORT, hostname: "0.0.0.0" }, async (req) => {
       start(c) {
         ctrl = c;
         clients.add(c);
+        dockerTick(); // 接続直後にコンテナ情報を最新化（アイドル中は停止しているため）
         const enc = new TextEncoder();
         c.enqueue(enc.encode(`event: history\ndata: ${JSON.stringify(history)}\n\n`));
         if (latest) {
