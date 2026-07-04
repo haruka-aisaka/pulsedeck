@@ -446,6 +446,27 @@ footer {
     padding-left: calc(14px + env(safe-area-inset-left));
     padding-right: calc(14px + env(safe-area-inset-right));
   }
+  /* ゲージは 2 列固定でコンパクトに */
+  .gauges {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+  .gauge {
+    padding: 14px 8px 12px;
+  }
+  .ring {
+    width: 100px;
+    height: 100px;
+  }
+  .ring::before {
+    inset: 10px;
+  }
+  .ring .val {
+    font-size: 19px;
+  }
+  .glabel {
+    margin-top: 9px;
+  }
   .conn {
     margin-left: 0;
   }
