@@ -2,10 +2,17 @@
 "use strict";
 
 const $ = (s) => document.querySelector(s);
-const MAX_POINTS = 300; // 全レンジ共通の点数
+const MAX_POINTS = 300; // サーバー保持の点数
 // レンジ別履歴（サーバー側でダウンサンプリング済み）
 let histories = { m10: [], h3: [], h24: [] };
 let range = "m10"; // 既定は短期
+// 表示レンジ → 参照する履歴と点数。m1 は m10 の末尾 30 点を切り出すだけ（追加転送なし）
+const RANGE_VIEWS = {
+  m1: { src: "m10", points: 30 },
+  m10: { src: "m10", points: 300 },
+  h3: { src: "h3", points: 300 },
+  h24: { src: "h24", points: 300 },
+};
 
 // ---------- ユーティリティ ----------
 const fmtKB = (kb) => {
@@ -32,15 +39,16 @@ function setGauge(id, pct, text, sub, colorPct = pct) {
 // ---------- チャート（Canvas 自作） ----------
 const fmtAxis = (v) =>
   v >= 1000 ? (v / 1000).toFixed(1) + "k" : v >= 10 ? Math.round(v) : v >= 1 ? v.toFixed(1) : v.toFixed(2);
-const fmtTime = (t) => {
+const fmtTime = (t, withSec = false) => {
   const d = new Date(t);
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  const hm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  return withSec ? `${hm}:${String(d.getSeconds()).padStart(2, "0")}` : hm;
 };
 
 function drawChart(
   canvas,
   series,
-  { min = 0, max = 100, colors = ["#58f6c4"], fill = true, times = [] } = {},
+  { min = 0, max = 100, colors = ["#58f6c4"], fill = true, times = [], points = MAX_POINTS } = {},
 ) {
   const dpr = devicePixelRatio || 1;
   const w = canvas.clientWidth, h = canvas.clientHeight;
@@ -76,12 +84,13 @@ function drawChart(
     ctx.fillText(fmtAxis(hi - ((hi - lo) / 4) * i), w - 4, y + 11);
   }
 
-  // x 軸は直近 10 分の固定ウィンドウ
-  const span = MAX_POINTS - 1;
+  // x 軸は表示レンジ分の固定ウィンドウ
+  const span = points - 1;
 
   // X 軸時刻（ウィンドウを 4 等分。データのある範囲のみ）
   if (times.length >= 2) {
     const stepMs = (times[times.length - 1] - times[0]) / (times.length - 1);
+    const withSec = stepMs * span < 300_000; // 5 分未満のウィンドウは秒まで表示
     ctx.fillStyle = "rgba(125,138,165,0.7)";
     for (let i = 0; i <= 4; i++) {
       const x = (w / 4) * i;
@@ -89,7 +98,7 @@ function drawChart(
       // データがまだ無い左側の時間帯もサンプリング間隔から時刻を外挿して表示する
       const t = idx >= 0 ? times[idx] : times[0] + idx * stepMs;
       ctx.textAlign = i === 0 ? "left" : i === 4 ? "right" : "center";
-      ctx.fillText(fmtTime(t), Math.min(Math.max(x, 2), w - 2), h - 2);
+      ctx.fillText(fmtTime(t, withSec), Math.min(Math.max(x, 2), w - 2), h - 2);
     }
   }
 
@@ -128,21 +137,25 @@ function drawChart(
 }
 
 function renderCharts() {
-  const history = histories[range] ?? [];
+  const view = RANGE_VIEWS[range];
+  const history = (histories[view.src] ?? []).slice(-view.points);
   const times = history.map((p) => p.t);
-  drawChart($("#c-cpu"), [history.map((p) => p.cpu)], { times });
-  drawChart($("#c-mem"), [history.map((p) => p.mem)], { colors: ["#6aa5ff"], times });
+  const points = view.points;
+  drawChart($("#c-cpu"), [history.map((p) => p.cpu)], { times, points });
+  drawChart($("#c-mem"), [history.map((p) => p.mem)], { colors: ["#6aa5ff"], times, points });
   drawChart($("#c-temp"), [history.map((p) => p.temp ?? 0)], {
     min: 20,
     max: 95,
     colors: ["#ffb454"],
     times,
+    points,
   });
   // サーバーは KB/s で送ってくるため MB/s に換算して描画する
   drawChart($("#c-net"), [history.map((p) => p.rx / 1024), history.map((p) => p.tx / 1024)], {
     max: null,
     colors: ["#6aa5ff", "#58f6c4"],
     times,
+    points,
   });
 }
 
@@ -248,7 +261,7 @@ function apply(s) {
   }
   if (m10.length > MAX_POINTS) m10.splice(0, m10.length - MAX_POINTS);
   // 長期表示中は該当データが変わったときだけ再描画する（longpoint イベント側で描画）
-  if (range === "m10") renderCharts();
+  if (RANGE_VIEWS[range].src === "m10") renderCharts();
   renderCores(s.cpu.perCore);
   renderContainers(s.containers ?? [], s.dockerAvailable);
   renderProcs(s.procs ?? []);
@@ -274,7 +287,7 @@ function connect() {
     if (!h) return;
     h.push(point);
     if (h.length > MAX_POINTS) h.splice(0, h.length - MAX_POINTS);
-    if (range === r) renderCharts();
+    if (RANGE_VIEWS[range].src === r) renderCharts();
   });
   es.addEventListener("snapshot", (e) => {
     setConn("live", "live");
