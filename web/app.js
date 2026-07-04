@@ -2,8 +2,10 @@
 "use strict";
 
 const $ = (s) => document.querySelector(s);
-let history = [];
-const MAX_POINTS = 300; // 2 秒間隔 × 300 = 直近 10 分
+const MAX_POINTS = 300; // 全レンジ共通の点数
+// レンジ別履歴（サーバー側でダウンサンプリング済み）
+let histories = { m10: [], h3: [], h24: [] };
+let range = "m10"; // 既定は短期
 
 // ---------- ユーティリティ ----------
 const fmtKB = (kb) => {
@@ -126,6 +128,7 @@ function drawChart(
 }
 
 function renderCharts() {
+  const history = histories[range] ?? [];
   const times = history.map((p) => p.t);
   drawChart($("#c-cpu"), [history.map((p) => p.cpu)], { times });
   drawChart($("#c-mem"), [history.map((p) => p.mem)], { colors: ["#6aa5ff"], times });
@@ -231,9 +234,10 @@ function apply(s) {
     `${fmtKB(s.disk.usedKB)} / ${fmtKB(s.disk.totalKB)}`,
   );
 
-  // 初回受信は history イベント済み分と重複するため t で弾く
-  if (!history.length || history[history.length - 1].t < s.t) {
-    history.push({
+  // 短期レンジはスナップショットから追記（初回は history イベント済み分と t で重複排除）
+  const m10 = histories.m10;
+  if (!m10.length || m10[m10.length - 1].t < s.t) {
+    m10.push({
       t: s.t,
       cpu: s.cpu.usage,
       mem: s.mem.usage,
@@ -242,8 +246,9 @@ function apply(s) {
       tx: s.net.txKBs,
     });
   }
-  if (history.length > MAX_POINTS) history.splice(0, history.length - MAX_POINTS);
-  renderCharts();
+  if (m10.length > MAX_POINTS) m10.splice(0, m10.length - MAX_POINTS);
+  // 長期表示中は該当データが変わったときだけ再描画する（longpoint イベント側で描画）
+  if (range === "m10") renderCharts();
   renderCores(s.cpu.perCore);
   renderContainers(s.containers ?? [], s.dockerAvailable);
   renderProcs(s.procs ?? []);
@@ -260,8 +265,16 @@ function setConn(cls, label) {
 function connect() {
   const es = new EventSource("/api/stream");
   es.addEventListener("history", (e) => {
-    history = JSON.parse(e.data);
+    histories = JSON.parse(e.data);
     renderCharts();
+  });
+  es.addEventListener("longpoint", (e) => {
+    const { range: r, point } = JSON.parse(e.data);
+    const h = histories[r];
+    if (!h) return;
+    h.push(point);
+    if (h.length > MAX_POINTS) h.splice(0, h.length - MAX_POINTS);
+    if (range === r) renderCharts();
   });
   es.addEventListener("snapshot", (e) => {
     setConn("live", "live");
@@ -269,6 +282,15 @@ function connect() {
   });
   es.onerror = () => setConn("dead", "disconnected — retrying");
 }
+
+// ---------- レンジ切り替え ----------
+document.querySelectorAll(".range-toggle button").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    range = btn.dataset.range;
+    document.querySelectorAll(".range-toggle button").forEach((b) => b.classList.toggle("on", b === btn));
+    renderCharts();
+  });
+});
 
 connect();
 addEventListener("resize", renderCharts);

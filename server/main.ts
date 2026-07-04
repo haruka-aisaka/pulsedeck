@@ -10,7 +10,7 @@ const TICK_MS = 2000;
 const PROC_EVERY_TICKS = 3; // プロセス走査は 6 秒ごと（全 /proc 走査は高コスト）
 const DOCKER_INTERVAL_MS = 10_000;
 const SERVICES_INTERVAL_MS = 60_000;
-const HISTORY_MAX = 300; // 2 秒間隔 × 300 = 直近 10 分
+const HISTORY_MAX = 300; // 各レンジ 300 点固定（メモリ一定）
 
 interface HistoryPoint {
   t: number;
@@ -21,8 +21,61 @@ interface HistoryPoint {
   tx: number;
 }
 
+// 表示レンジ。every は 2 秒 tick 何回分を 1 点に集約するか
+const RANGES = [
+  { key: "m10", every: 1 }, // 2 秒 × 300 = 10 分
+  { key: "h3", every: 18 }, // 36 秒平均 × 300 = 3 時間
+  { key: "h24", every: 144 }, // 4.8 分平均 × 300 = 24 時間
+] as const;
+type RangeKey = (typeof RANGES)[number]["key"];
+
 const collector = new Collector();
-const history: HistoryPoint[] = [];
+const histories: Record<RangeKey, HistoryPoint[]> = { m10: [], h3: [], h24: [] };
+
+interface Acc {
+  n: number;
+  cpu: number;
+  mem: number;
+  temp: number;
+  tempN: number;
+  rx: number;
+  tx: number;
+}
+const emptyAcc = (): Acc => ({ n: 0, cpu: 0, mem: 0, temp: 0, tempN: 0, rx: 0, tx: 0 });
+const accs: Record<RangeKey, Acc> = { m10: emptyAcc(), h3: emptyAcc(), h24: emptyAcc() };
+
+// 各レンジへ 1 tick 分を反映し、集約点が確定したレンジには longpoint を配信する
+function pushHistory(p: HistoryPoint) {
+  for (const { key, every } of RANGES) {
+    let point = p;
+    if (every > 1) {
+      const a = accs[key];
+      a.n++;
+      a.cpu += p.cpu;
+      a.mem += p.mem;
+      a.rx += p.rx;
+      a.tx += p.tx;
+      if (p.temp != null) {
+        a.temp += p.temp;
+        a.tempN++;
+      }
+      if (a.n < every) continue;
+      point = {
+        t: p.t,
+        cpu: a.cpu / a.n,
+        mem: a.mem / a.n,
+        temp: a.tempN > 0 ? a.temp / a.tempN : null,
+        rx: a.rx / a.n,
+        tx: a.tx / a.n,
+      };
+      accs[key] = emptyAcc();
+      broadcast("longpoint", { range: key, point });
+    }
+    const h = histories[key];
+    h.push(point);
+    if (h.length > HISTORY_MAX) h.splice(0, h.length - HISTORY_MAX);
+  }
+}
 const clients = new Set<ReadableStreamDefaultController<Uint8Array>>();
 let latest: Snapshot | null = null;
 let containers: ContainerInfo[] = [];
@@ -50,7 +103,7 @@ async function tick() {
     latest = await collector.snapshot(wantProcs);
     if (wantProcs) lastProcs = latest.procs;
     else latest.procs = lastProcs;
-    history.push({
+    pushHistory({
       t: latest.t,
       cpu: latest.cpu.usage,
       mem: latest.mem.usage,
@@ -58,7 +111,6 @@ async function tick() {
       rx: latest.net.rxKBs,
       tx: latest.net.txKBs,
     });
-    if (history.length > HISTORY_MAX) history.splice(0, history.length - HISTORY_MAX);
     if (clients.size > 0) broadcast("snapshot", { ...latest, containers, dockerAvailable, services });
   } catch (e) {
     console.error("collect error:", e);
@@ -112,7 +164,7 @@ Deno.serve({ port: PORT, hostname: "0.0.0.0" }, async (req) => {
         // 接続直後にコンテナ・サービス情報を最新化（アイドル中は停止しているため）
         dockerTick().then(servicesTick);
         const enc = new TextEncoder();
-        c.enqueue(enc.encode(`event: history\ndata: ${JSON.stringify(history)}\n\n`));
+        c.enqueue(enc.encode(`event: history\ndata: ${JSON.stringify(histories)}\n\n`));
         if (latest) {
           c.enqueue(enc.encode(
             `event: snapshot\ndata: ${
@@ -135,7 +187,7 @@ Deno.serve({ port: PORT, hostname: "0.0.0.0" }, async (req) => {
   }
 
   if (url.pathname === "/api/snapshot") {
-    return Response.json({ ...latest, containers, dockerAvailable, services, history });
+    return Response.json({ ...latest, containers, dockerAvailable, services, histories });
   }
 
   // 静的ファイル配信

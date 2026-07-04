@@ -167,6 +167,7 @@ h2 {
 .ring {
   --p: 0;
   --c: var(--accent);
+  position: relative; /* 内円の位置基準。無いと環境によって内円が中心からずれる */
   width: 118px;
   height: 118px;
   margin: 0 auto;
@@ -179,8 +180,7 @@ h2 {
 .ring::before {
   content: "";
   position: absolute;
-  width: 96px;
-  height: 96px;
+  inset: 11px;
   border-radius: 50%;
   background: var(--bg1);
 }
@@ -203,6 +203,36 @@ h2 {
   font-family: var(--mono);
   margin-top: 3px;
   min-height: 18px;
+}
+
+/* レンジ切り替え */
+.range-toggle {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0;
+  margin-bottom: -8px;
+}
+.range-toggle button {
+  padding: 6px 14px;
+  font: 12px var(--mono);
+  color: var(--muted);
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-left-width: 0;
+  cursor: pointer;
+}
+.range-toggle button:first-child {
+  border-left-width: 1px;
+  border-radius: 8px 0 0 8px;
+}
+.range-toggle button:last-child {
+  border-radius: 0 8px 8px 0;
+}
+.range-toggle button.on {
+  color: #04120c;
+  background: var(--accent);
+  border-color: var(--accent);
+  font-weight: 700;
 }
 
 /* チャート */
