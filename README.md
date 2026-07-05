@@ -26,7 +26,9 @@ designed to be exposed safely over [Tailscale](https://tailscale.com/).
 - **Top processes** — top 10 by CPU with RSS.
 - **Eco mode by design** — when nobody is watching, process scanning, Docker polling and service discovery all
   pause (≈0.2% CPU idle on a Raspberry Pi 4).
-- **PWA-ready** — add to your phone's home screen for a full-screen, edge-to-edge experience.
+- **PWA-ready** — add to your phone's home screen for a full-screen, edge-to-edge experience. A service worker
+  caches static assets for instant startup and an offline shell (requires HTTPS, e.g. via `tailscale serve`;
+  metrics are never cached).
 - **Tiny footprint** — a single Deno process, no database, no client-side dependencies. Frontend is plain
   HTML/CSS/JS.
 

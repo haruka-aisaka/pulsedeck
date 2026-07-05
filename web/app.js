@@ -408,3 +408,10 @@ applyTheme();
 
 connect();
 addEventListener("resize", renderCharts);
+
+// ---------- Service Worker（secure context のみ。平文 HTTP では何もしない） ----------
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js").catch(() => {
+    /* 登録失敗時は従来どおり動作 */
+  });
+}
