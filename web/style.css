@@ -59,6 +59,68 @@ body {
   color: var(--text);
   font: 15px/1.5 -apple-system, "Segoe UI", Roboto, "Hiragino Sans", "Noto Sans JP", sans-serif;
 }
+/* スプラッシュスクリーン（初回データ受信でフェードアウト） */
+#splash {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 20px;
+  background:
+    radial-gradient(700px 400px at 50% 35%, var(--glow2), transparent 70%),
+    var(--bg1);
+  transition: opacity 0.45s ease;
+}
+#splash.hide {
+  opacity: 0;
+  pointer-events: none;
+}
+.splash-logo {
+  filter: drop-shadow(0 0 24px var(--glow2));
+}
+/* パルス線が繰り返し描画されるアニメーション */
+.splash-pulse {
+  stroke-dasharray: 44;
+  stroke-dashoffset: 44;
+  animation: pulse-draw 1.6s ease-in-out infinite;
+}
+@keyframes pulse-draw {
+  0% {
+    stroke-dashoffset: 44;
+    opacity: 1;
+  }
+  55% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 0;
+  }
+}
+.splash-name {
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: 2px;
+  color: var(--text);
+  animation: splash-fade 1.2s ease both;
+}
+@keyframes splash-fade {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 header {
   display: flex;
   align-items: center;

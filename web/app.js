@@ -306,6 +306,25 @@ function apply(s) {
   renderServices(s.services ?? []);
 }
 
+// ---------- スプラッシュ ----------
+const splashStart = performance.now();
+let splashHidden = false;
+
+function hideSplash() {
+  if (splashHidden) return;
+  splashHidden = true;
+  // 一瞬で消えるとチラつくため最低 900ms は表示する
+  const wait = Math.max(0, 900 - (performance.now() - splashStart));
+  setTimeout(() => {
+    const el = $("#splash");
+    el.classList.add("hide");
+    setTimeout(() => el.remove(), 500);
+  }, wait);
+}
+
+// サーバーに繋がらない場合でもスプラッシュで塞ぎ続けない
+setTimeout(hideSplash, 4000);
+
 // ---------- SSE 接続（自動再接続つき） ----------
 function setConn(cls, label) {
   const el = $("#conn");
@@ -330,6 +349,7 @@ function connect() {
   es.addEventListener("snapshot", (e) => {
     setConn("live", "live");
     apply(JSON.parse(e.data));
+    hideSplash();
   });
   es.onerror = () => setConn("dead", "disconnected — retrying");
 }
