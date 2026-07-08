@@ -1,7 +1,9 @@
 {
   "tasks": {
     "start": "deno run --allow-all server/main.ts",
-    "dev": "deno run --watch --allow-all server/main.ts"
+    "dev": "deno run --watch --allow-all server/main.ts",
+    "fmt": "docker run --rm -v \"$PWD\":/app -w /app denoland/deno:alpine-2.3.6 fmt",
+    "check": "docker run --rm -v \"$PWD\":/app -w /app denoland/deno:alpine-2.3.6 sh -c 'deno fmt --check && deno lint && deno check server/main.ts'"
   },
   "fmt": {
     "lineWidth": 110

@@ -90,8 +90,13 @@ deno task start
 
 ```bash
 deno task dev        # watch mode
-deno fmt && deno lint && deno check server/main.ts
+deno task check      # CI と同じ Deno バージョン (Docker 経由) で fmt --check / lint / type check
+deno task fmt        # 同上でフォーマット適用
 ```
+
+`fmt` の挙動は Deno のバージョン間で変わりうるため、 `check` / `fmt` タスクは CI と揃えるために
+`denoland/deno:alpine-2.3.6` (Dockerfile のベースと同じ) で走らせる構成にしてある。 素のローカル Deno
+でも動くが、 push 前に一度 `deno task check` を通しておくと CI で fmt 差分に躓かない。
 
 ## License
 
