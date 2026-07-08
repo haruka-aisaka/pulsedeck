@@ -115,27 +115,27 @@
     <title>PulseDeck</title>
     <!-- 外部 CSS 読み込み前の白フラッシュ防止: 背景色だけ先に確定させる -->
     <style>
-    html {
-      background: #0d1220;
-    }
-    @media (prefers-color-scheme: light) {
       html {
+        background: #0d1220;
+      }
+      @media (prefers-color-scheme: light) {
+        html {
+          background: #f7f9fc;
+        }
+      }
+      html[data-theme="dark"] {
+        background: #0d1220;
+      }
+      html[data-theme="light"] {
         background: #f7f9fc;
       }
-    }
-    html[data-theme="dark"] {
-      background: #0d1220;
-    }
-    html[data-theme="light"] {
-      background: #f7f9fc;
-    }
     </style>
     <!-- 手動テーマ固定時は最初のペイント前に反映する -->
     <script>
-    try {
-      const t = localStorage.getItem("theme");
-      if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
-    } catch { /* localStorage 不可なら OS 設定に従う */ }
+      try {
+        const t = localStorage.getItem("theme");
+        if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+      } catch { /* localStorage 不可なら OS 設定に従う */ }
     </script>
     <link rel="stylesheet" href="/style.css">
     <link

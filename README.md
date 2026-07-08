@@ -23,8 +23,8 @@ designed to be exposed safely over [Tailscale](https://tailscale.com/).
   links. Never forget which port a service lives on again.
 - **Docker containers** — state, CPU% and memory per container, straight from the Docker Engine API over the
   unix socket.
-- **Top processes** — top 10 with a CPU / MEM sort toggle. Shows PID, name, CPU%, RSS and %MEM;
-  toggle is remembered across reloads.
+- **Top processes** — top 10 with a CPU / MEM sort toggle. Shows PID, name, CPU%, RSS and %MEM; toggle is
+  remembered across reloads.
 - **Eco mode by design** — when nobody is watching, process scanning, Docker polling and service discovery all
   pause (≈0.2% CPU idle on a Raspberry Pi 4).
 - **PWA-ready** — add to your phone's home screen for a full-screen, edge-to-edge experience. A service worker
