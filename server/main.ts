@@ -94,7 +94,7 @@ function broadcast(event: string, data: unknown) {
 }
 
 let tickCount = 0;
-let lastProcs: Snapshot["procs"] = [];
+let lastProcs: Snapshot["procs"] = { byCpu: [], byMem: [] };
 
 async function tick() {
   try {

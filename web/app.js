@@ -239,13 +239,25 @@ function renderServices(services) {
   }).join("") || `<div class="empty">No listening services detected</div>`;
 }
 
-function renderProcs(procs) {
-  $("#procs tbody").innerHTML = procs.map((p) =>
-    `<tr>
+// Top Processes のソート状態（CPU or MEM）と直近のデータ・総メモリ量を保持し、トグル操作で即座に再描画できるようにする
+let procSort = "cpu";
+try {
+  const s = localStorage.getItem("procSort");
+  if (s === "cpu" || s === "mem") procSort = s;
+} catch { /* localStorage 不可なら既定の CPU */ }
+let lastProcs = { byCpu: [], byMem: [] };
+let lastMemTotalKB = 0;
+
+function renderProcs() {
+  const list = (procSort === "mem" ? lastProcs.byMem : lastProcs.byCpu) ?? [];
+  $("#procs tbody").innerHTML = list.map((p) => {
+    const memPct = lastMemTotalKB > 0 ? (p.rssKB / lastMemTotalKB) * 100 : null;
+    return `<tr>
     <td>${p.pid}</td><td title="${esc(p.name)}">${esc(p.name)}</td>
     <td class="r">${p.cpu.toFixed(1)}</td><td class="r">${fmtKB(p.rssKB)}</td>
-  </tr>`
-  ).join("");
+    <td class="r">${memPct == null ? "—" : memPct.toFixed(1)}</td>
+  </tr>`;
+  }).join("");
 }
 
 // ---------- スナップショット適用 ----------
@@ -302,7 +314,9 @@ function apply(s) {
   if (RANGE_VIEWS[range].src === "m10") renderCharts();
   renderCores(s.cpu.perCore);
   renderContainers(s.containers ?? [], s.dockerAvailable);
-  renderProcs(s.procs ?? []);
+  lastProcs = s.procs ?? { byCpu: [], byMem: [] };
+  lastMemTotalKB = s.mem?.totalKB ?? 0;
+  renderProcs();
   renderServices(s.services ?? []);
 }
 
@@ -362,6 +376,24 @@ document.querySelectorAll(".range-toggle button").forEach((btn) => {
     renderCharts();
   });
 });
+
+// ---------- プロセス一覧のソート切り替え ----------
+function applyProcSort() {
+  document.querySelectorAll(".proc-sort button").forEach((b) => {
+    b.classList.toggle("on", b.dataset.sort === procSort);
+  });
+  renderProcs();
+}
+document.querySelectorAll(".proc-sort button").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    procSort = btn.dataset.sort;
+    try {
+      localStorage.setItem("procSort", procSort);
+    } catch { /* 保存できなくても動作は継続 */ }
+    applyProcSort();
+  });
+});
+applyProcSort();
 
 // ---------- テーマ (auto → light → dark) ----------
 const THEME_MODES = ["auto", "light", "dark"];

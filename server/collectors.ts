@@ -18,7 +18,7 @@ export interface Snapshot {
   swap: { totalKB: number; usedKB: number };
   disk: { totalKB: number; usedKB: number; usage: number; mount: string };
   net: { rxKBs: number; txKBs: number; rxTotal: number; txTotal: number };
-  procs: ProcInfo[];
+  procs: ProcSet;
 }
 
 export interface ProcInfo {
@@ -26,6 +26,12 @@ export interface ProcInfo {
   name: string;
   cpu: number;
   rssKB: number;
+}
+
+// CPU 順とメモリ順の上位を両方返し、クライアント側のソート切替でちらつかないようにする
+export interface ProcSet {
+  byCpu: ProcInfo[];
+  byMem: ProcInfo[];
 }
 
 async function readText(path: string): Promise<string> {
@@ -123,7 +129,7 @@ export class Collector {
     }
     this.#prevNet = { rx, tx, t: now };
 
-    const procs = includeProcs ? await this.topProcs(now) : [];
+    const procs = includeProcs ? await this.topProcs(now) : { byCpu: [], byMem: [] };
 
     return {
       t: now,
@@ -145,8 +151,8 @@ export class Collector {
     };
   }
 
-  // CPU 使用率 Top 10 プロセス（前回サンプルとの差分から算出）
-  async topProcs(now: number): Promise<ProcInfo[]> {
+  // CPU 使用率上位とメモリ (RSS) 上位を各 10 件返す（前回サンプルとの差分から算出）
+  async topProcs(now: number): Promise<ProcSet> {
     const pageKB = 4; // Linux の標準ページサイズ 4KiB
     const results: { pid: number; name: string; ticks: number; rssKB: number }[] = [];
     for await (const e of Deno.readDir("/proc")) {
@@ -173,6 +179,8 @@ export class Collector {
     });
     this.#prevProcCpu = new Map(results.map((r) => [r.pid, r.ticks]));
     this.#prevProcT = now;
-    return procs.sort((a, b) => b.cpu - a.cpu || b.rssKB - a.rssKB).slice(0, 10);
+    const byCpu = [...procs].sort((a, b) => b.cpu - a.cpu || b.rssKB - a.rssKB).slice(0, 10);
+    const byMem = [...procs].sort((a, b) => b.rssKB - a.rssKB || b.cpu - a.cpu).slice(0, 10);
+    return { byCpu, byMem };
   }
 }
