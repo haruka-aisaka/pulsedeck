@@ -3,6 +3,10 @@ services:
     build: .
     container_name: pulsedeck
     restart: unless-stopped
+    # メモリ上限。 SSE 接続増加や Canvas チャートのバッファ分を含めて余裕を持たせる
+    mem_limit: 192m
+    memswap_limit: 384m
+    mem_reservation: 96m
     # ホストのネットワーク統計・プロセス一覧を取得するため host 名前空間を共有する
     network_mode: host
     pid: host
@@ -13,5 +17,6 @@ services:
       - PORT=8480
       - HOST_ROOT=/host/root
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # コンテナ再起動 (POST /containers/*/restart) のため rw マウント。 tailnet 限定公開が前提
+      - /var/run/docker.sock:/var/run/docker.sock:rw
       - /:/host/root:ro

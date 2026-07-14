@@ -2,7 +2,7 @@
 // 2 秒ごとにメトリクスを収集し、SSE でブラウザへ配信する。
 
 import { Collector, Snapshot } from "./collectors.ts";
-import { ContainerInfo, listContainers } from "./docker.ts";
+import { ContainerInfo, listContainers, restartContainer } from "./docker.ts";
 import { listServices, ServiceInfo } from "./services.ts";
 
 const PORT = Number(Deno.env.get("PORT") ?? 8480);
@@ -188,6 +188,34 @@ Deno.serve({ port: PORT, hostname: "0.0.0.0" }, async (req) => {
 
   if (url.pathname === "/api/snapshot") {
     return Response.json({ ...latest, containers, dockerAvailable, services, histories });
+  }
+
+  // ホストの再起動: pid: host 経由で見える systemd (PID 1) に SIGRTMIN+5 を送り reboot.target を発火
+  if (url.pathname === "/api/reboot" && req.method === "POST") {
+    try {
+      const out = await new Deno.Command("kill", { args: ["-s", "SIGRTMIN+5", "1"] }).output();
+      if (!out.success) {
+        const stderr = new TextDecoder().decode(out.stderr).trim();
+        return Response.json({ error: stderr || "kill failed" }, { status: 500 });
+      }
+      return Response.json({ ok: true });
+    } catch (e) {
+      return Response.json({ error: (e as Error).message }, { status: 500 });
+    }
+  }
+
+  // コンテナ再起動: /api/containers/<id>/restart
+  const restartMatch = url.pathname.match(/^\/api\/containers\/([^/]+)\/restart$/);
+  if (restartMatch && req.method === "POST") {
+    try {
+      await restartContainer(restartMatch[1]);
+      return Response.json({ ok: true });
+    } catch (e) {
+      const msg = (e as Error).message;
+      // Docker API のエラーコードは message から復元。 not found は 404 に対応
+      const status = /404/.test(msg) ? 404 : /50\d/.test(msg) ? 503 : 500;
+      return Response.json({ error: msg }, { status });
+    }
   }
 
   // 静的ファイル配信

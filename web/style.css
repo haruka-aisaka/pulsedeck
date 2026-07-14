@@ -183,6 +183,119 @@ h1 {
   border-color: var(--accent);
   color: var(--text);
 }
+/* ヘッダー右上の電源 (リブート) ボタン */
+.power-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--muted);
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.power-btn:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+/* Containers 行末のインライン再起動ボタン */
+.ct-restart {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--card-border);
+  border-radius: 5px;
+  cursor: pointer;
+}
+.ct-restart:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.ct-restart:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* モーダル (リブート / コンテナ再起動 共通) */
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+}
+.modal[hidden] {
+  display: none;
+}
+.modal-box {
+  width: 100%;
+  max-width: 420px;
+  background: var(--bg1);
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  padding: 20px 22px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.modal-title {
+  font-size: 16px;
+  font-weight: 650;
+  color: var(--text);
+}
+.modal-body {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+.modal-body.err {
+  color: var(--danger);
+}
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+.modal-actions button {
+  padding: 8px 16px;
+  font: 13px system-ui, sans-serif;
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.modal-cancel:hover {
+  border-color: var(--accent);
+}
+.modal-danger {
+  background: var(--danger) !important;
+  color: #fff !important;
+  border-color: var(--danger) !important;
+  font-weight: 650;
+}
+.modal-danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 .conn {
   margin-left: auto;
   display: flex;

@@ -15,11 +15,11 @@ export interface ContainerInfo {
   ports: number[];
 }
 
-async function request(path: string): Promise<unknown> {
+async function request(path: string, method = "GET"): Promise<unknown> {
   const conn = await Deno.connect({ path: SOCKET, transport: "unix" });
   try {
     await conn.write(new TextEncoder().encode(
-      `GET ${path} HTTP/1.1\r\nHost: docker\r\nConnection: close\r\n\r\n`,
+      `${method} ${path} HTTP/1.1\r\nHost: docker\r\nConnection: close\r\n\r\n`,
     ));
     const chunks: Uint8Array[] = [];
     const buf = new Uint8Array(65536);
@@ -52,7 +52,19 @@ async function request(path: string): Promise<unknown> {
       }
       body = out;
     }
-    if (!/^HTTP\/1\.[01] 200/.test(head)) throw new Error(`docker api: ${head.split("\r\n")[0]}`);
+    // POST /containers/*/restart は成功時 204 No Content。 GET は 200 前提
+    const status = head.match(/^HTTP\/1\.[01] (\d+)/)?.[1];
+    if (!status) throw new Error(`docker api: ${head.split("\r\n")[0]}`);
+    const code = Number(status);
+    if (code >= 400) {
+      // エラー時のボディに Docker のエラーメッセージが入っている
+      let msg = head.split("\r\n")[0];
+      try {
+        msg = (JSON.parse(body) as { message?: string }).message ?? msg;
+      } catch { /* JSON でなければヘッダをそのまま */ }
+      throw new Error(`docker api ${code}: ${msg}`);
+    }
+    if (code === 204 || !body) return null;
     return JSON.parse(body);
   } finally {
     conn.close();
@@ -61,6 +73,11 @@ async function request(path: string): Promise<unknown> {
 
 // one-shot 統計の CPU% 算出用に前回サンプルを保持する（daemon 側の 1 秒サンプリングを避ける）
 const prevCpuSample = new Map<string, { total: number; system: number }>();
+
+// コンテナを再起動する。 成功時は 204 で null が返る
+export async function restartContainer(id: string): Promise<void> {
+  await request(`/v1.43/containers/${encodeURIComponent(id)}/restart`, "POST");
+}
 
 export async function listContainers(): Promise<ContainerInfo[]> {
   // deno-lint-ignore no-explicit-any

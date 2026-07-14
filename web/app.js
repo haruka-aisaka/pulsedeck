@@ -215,18 +215,26 @@ function renderContainers(list, available) {
     : "";
   const tbody = $("#containers tbody");
   if (!available) {
-    tbody.innerHTML = `<tr><td colspan="5" class="empty">Docker socket not available</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="empty">Docker socket not available</td></tr>`;
     return;
   }
-  tbody.innerHTML = list.map((c) =>
-    `<tr>
+  tbody.innerHTML = list.map((c) => {
+    // running のみ再起動可能。 それ以外の状態のときはボタンを表示しない
+    const canRestart = c.state === "running";
+    const btn = canRestart
+      ? `<button class="ct-restart" data-ct-id="${esc(c.id)}" data-ct-name="${
+        esc(c.name)
+      }" title="Restart">↻</button>`
+      : "";
+    return `<tr>
     <td title="${esc(c.name)}">${esc(c.name)}</td>
     <td class="col-img" title="${esc(c.image)}">${esc(c.image)}</td>
     <td><span class="state ${esc(c.state)}">${esc(c.state)}</span></td>
     <td class="r">${c.cpu == null ? "—" : c.cpu.toFixed(1)}</td>
     <td class="r">${c.memUsedMB == null ? "—" : c.memUsedMB.toFixed(0) + " MB"}</td>
-  </tr>`
-  ).join("") || `<tr><td colspan="5" class="empty">No containers</td></tr>`;
+    <td class="r col-act">${btn}</td>
+  </tr>`;
+  }).join("") || `<tr><td colspan="6" class="empty">No containers</td></tr>`;
 }
 
 function renderServices(services) {
@@ -375,6 +383,134 @@ document.querySelectorAll(".range-toggle button").forEach((btn) => {
     document.querySelectorAll(".range-toggle button").forEach((b) => b.classList.toggle("on", b === btn));
     renderCharts();
   });
+});
+
+// ---------- リブート / コンテナ再起動モーダル ----------
+// モーダルは 「初期状態 → (実行中) → エラー / 成功後は閉じる」 の単純な状態遷移。
+// リブートのみカウントダウンフェーズを持つ
+
+const REBOOT_COUNTDOWN_SEC = 10;
+let rebootTimer = null;
+
+function openReboot() {
+  const body = $("#reboot-body");
+  body.textContent = "ダッシュボードは一時的に切断されます。 起動後に自動で再接続します。";
+  body.classList.remove("err");
+  const confirm = document.querySelector("#reboot-modal [data-act=reboot-confirm]");
+  confirm.textContent = "再起動";
+  confirm.disabled = false;
+  $("#reboot-modal").hidden = false;
+}
+function closeReboot() {
+  if (rebootTimer) {
+    clearInterval(rebootTimer);
+    rebootTimer = null;
+  }
+  $("#reboot-modal").hidden = true;
+}
+function startRebootCountdown() {
+  const body = $("#reboot-body");
+  const confirm = document.querySelector("#reboot-modal [data-act=reboot-confirm]");
+  confirm.disabled = true;
+  let sec = REBOOT_COUNTDOWN_SEC;
+  const tick = () => {
+    body.textContent = `あと ${sec} 秒で再起動します。 キャンセルするには「キャンセル」を押してください。`;
+    if (sec <= 0) {
+      clearInterval(rebootTimer);
+      rebootTimer = null;
+      fireReboot();
+      return;
+    }
+    sec--;
+  };
+  tick();
+  rebootTimer = setInterval(tick, 1000);
+}
+async function fireReboot() {
+  const body = $("#reboot-body");
+  try {
+    const r = await fetch("/api/reboot", { method: "POST" });
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
+      throw new Error(j.error || `HTTP ${r.status}`);
+    }
+    // 成功時は特に UI を変えない。 SSE 切断が視覚的な合図
+    body.textContent = "再起動コマンドを送信しました。 まもなく切断されます。";
+  } catch (e) {
+    body.textContent = `再起動に失敗しました: ${e.message}`;
+    body.classList.add("err");
+    const confirm = document.querySelector("#reboot-modal [data-act=reboot-confirm]");
+    confirm.textContent = "閉じる";
+    confirm.disabled = false;
+    confirm.dataset.act = "reboot-cancel"; // 「閉じる」に用途を切り替え
+  }
+}
+
+$("#power-btn").addEventListener("click", openReboot);
+$("#reboot-modal").addEventListener("click", (ev) => {
+  const b = ev.target.closest("button");
+  if (!b) return;
+  const act = b.dataset.act;
+  if (act === "reboot-cancel") {
+    b.dataset.act = act; // no-op でも念のため
+    closeReboot();
+  } else if (act === "reboot-confirm") {
+    startRebootCountdown();
+  }
+});
+
+// コンテナ再起動
+let ctRestartTarget = null;
+function openCtRestart(id, name) {
+  ctRestartTarget = { id, name };
+  const body = $("#ct-restart-body");
+  body.textContent =
+    `コンテナ "${name}" を再起動します。 稼働中のリクエストは一時的に失敗する可能性があります。`;
+  body.classList.remove("err");
+  const confirm = document.querySelector("#ct-restart-modal [data-act=ct-restart-confirm]");
+  confirm.textContent = "再起動";
+  confirm.disabled = false;
+  confirm.dataset.act = "ct-restart-confirm";
+  $("#ct-restart-modal").hidden = false;
+}
+function closeCtRestart() {
+  ctRestartTarget = null;
+  $("#ct-restart-modal").hidden = true;
+}
+async function fireCtRestart() {
+  if (!ctRestartTarget) return;
+  const { id, name } = ctRestartTarget;
+  const body = $("#ct-restart-body");
+  const confirm = document.querySelector("#ct-restart-modal [data-act=ct-restart-confirm]");
+  confirm.disabled = true;
+  body.textContent = `${name} を再起動しています…`;
+  try {
+    const r = await fetch(`/api/containers/${encodeURIComponent(id)}/restart`, { method: "POST" });
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
+      throw new Error(j.error || `HTTP ${r.status}`);
+    }
+    closeCtRestart();
+  } catch (e) {
+    body.textContent = `再起動に失敗しました: ${e.message}`;
+    body.classList.add("err");
+    confirm.textContent = "閉じる";
+    confirm.dataset.act = "ct-restart-cancel";
+    confirm.disabled = false;
+  }
+}
+
+$("#containers").addEventListener("click", (ev) => {
+  const b = ev.target.closest("button.ct-restart");
+  if (!b) return;
+  openCtRestart(b.dataset.ctId, b.dataset.ctName);
+});
+$("#ct-restart-modal").addEventListener("click", (ev) => {
+  const b = ev.target.closest("button");
+  if (!b) return;
+  const act = b.dataset.act;
+  if (act === "ct-restart-cancel") closeCtRestart();
+  else if (act === "ct-restart-confirm") fireCtRestart();
 });
 
 // ---------- プロセス一覧のソート切り替え ----------

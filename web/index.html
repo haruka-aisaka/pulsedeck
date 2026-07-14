@@ -187,8 +187,35 @@
         <span class="dot"></span>
         <span id="conn-label">connecting</span>
       </div>
+      <button id="power-btn" class="power-btn" title="Reboot host" aria-label="Reboot host">⏻</button>
       <button id="theme-btn" class="theme-btn" title="Theme (auto / light / dark)">auto</button>
     </header>
+
+    <!-- リブート確認モーダル (通常は hidden) -->
+    <div id="reboot-modal" class="modal" hidden>
+      <div class="modal-box">
+        <h3 class="modal-title">ホストを再起動しますか？</h3>
+        <p class="modal-body" id="reboot-body">
+          ダッシュボードは一時的に切断されます。 起動後に自動で再接続します。
+        </p>
+        <div class="modal-actions">
+          <button class="modal-cancel" data-act="reboot-cancel">キャンセル</button>
+          <button class="modal-danger" data-act="reboot-confirm">再起動</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- コンテナ再起動確認モーダル -->
+    <div id="ct-restart-modal" class="modal" hidden>
+      <div class="modal-box">
+        <h3 class="modal-title">コンテナを再起動しますか？</h3>
+        <p class="modal-body" id="ct-restart-body">—</p>
+        <div class="modal-actions">
+          <button class="modal-cancel" data-act="ct-restart-cancel">キャンセル</button>
+          <button class="modal-danger" data-act="ct-restart-confirm">再起動</button>
+        </div>
+      </div>
+    </div>
 
     <main>
       <section class="gauges">
@@ -264,6 +291,7 @@
                   <th>State</th>
                   <th class="r">CPU%</th>
                   <th class="r">Mem</th>
+                  <th class="r col-act"></th>
                 </tr>
               </thead>
               <tbody></tbody>

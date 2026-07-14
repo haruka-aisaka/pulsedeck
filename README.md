@@ -25,6 +25,10 @@ designed to be exposed safely over [Tailscale](https://tailscale.com/).
   unix socket.
 - **Top processes** — top 10 with a CPU / MEM sort toggle. Shows PID, name, CPU%, RSS and %MEM; toggle is
   remembered across reloads.
+- **Power actions** — a ⏻ button in the header reboots the host (10 s countdown, cancellable); each running
+  container has an inline ↻ button to restart it. Both go through a confirmation modal. Host reboot signals
+  `SIGRTMIN+5` to host PID 1 (systemd), no extra caps required. Container restart uses the Docker Engine API,
+  so the compose file mounts `/var/run/docker.sock` read-write.
 - **Eco mode by design** — when nobody is watching, process scanning, Docker polling and service discovery all
   pause (≈0.2% CPU idle on a Raspberry Pi 4).
 - **PWA-ready** — add to your phone's home screen for a full-screen, edge-to-edge experience. A service worker
@@ -85,6 +89,8 @@ deno task start
 
 - `GET /api/stream` — SSE stream. Emits a `history` event on connect, then a `snapshot` event every 2 s.
 - `GET /api/snapshot` — current snapshot plus history as one JSON document.
+- `POST /api/reboot` — reboots the host by signalling `SIGRTMIN+5` to PID 1 (systemd `reboot.target`).
+- `POST /api/containers/<id>/restart` — restarts the given Docker container.
 
 ## Development
 
