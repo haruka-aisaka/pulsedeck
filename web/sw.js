@@ -1,7 +1,7 @@
 // PulseDeck Service Worker — 静的アセットの stale-while-revalidate キャッシュ
 // キャッシュから即応答しつつ裏で最新を取得するため、デプロイ後は次の起動で新 UI に切り替わる。
 
-const CACHE = "pulsedeck-static-v1";
+const CACHE = "pulsedeck-static-v2";
 const ASSETS = [
   "/",
   "/style.css",
