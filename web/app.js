@@ -255,15 +255,24 @@ try {
 } catch { /* localStorage 不可なら既定の CPU */ }
 let lastProcs = { byCpu: [], byMem: [] };
 let lastMemTotalKB = 0;
+let selfPid = null; // PulseDeck サーバー自身の PID (kill ボタンを出さないため)
 
 function renderProcs() {
   const list = (procSort === "mem" ? lastProcs.byMem : lastProcs.byCpu) ?? [];
   $("#procs tbody").innerHTML = list.map((p) => {
     const memPct = lastMemTotalKB > 0 ? (p.rssKB / lastMemTotalKB) * 100 : null;
+    // PID 1 (systemd) は誤爆で全停止するため kill ボタンを出さない
+    const canKill = p.pid !== 1 && p.pid !== selfPid;
+    const btn = canKill
+      ? `<button class="proc-kill" data-pk-pid="${p.pid}" data-pk-name="${
+        esc(p.name)
+      }" title="Kill process">✕</button>`
+      : "";
     return `<tr>
     <td>${p.pid}</td><td title="${esc(p.name)}">${esc(p.name)}</td>
     <td class="r">${p.cpu.toFixed(1)}</td><td class="r">${fmtKB(p.rssKB)}</td>
     <td class="r">${memPct == null ? "—" : memPct.toFixed(1)}</td>
+    <td class="r col-act">${btn}</td>
   </tr>`;
   }).join("");
 }
@@ -324,6 +333,7 @@ function apply(s) {
   renderContainers(s.containers ?? [], s.dockerAvailable);
   lastProcs = s.procs ?? { byCpu: [], byMem: [] };
   lastMemTotalKB = s.mem?.totalKB ?? 0;
+  if (typeof s.selfPid === "number") selfPid = s.selfPid;
   renderProcs();
   renderServices(s.services ?? []);
 }
@@ -511,6 +521,75 @@ $("#ct-restart-modal").addEventListener("click", (ev) => {
   const act = b.dataset.act;
   if (act === "ct-restart-cancel") closeCtRestart();
   else if (act === "ct-restart-confirm") fireCtRestart();
+});
+
+// ---------- プロセス kill モーダル ----------
+let procKillTarget = null;
+function openProcKill(pid, name) {
+  procKillTarget = { pid: Number(pid), name };
+  $("#proc-kill-title").textContent = `プロセス "${name}" (PID ${pid}) を終了しますか？`;
+  const body = $("#proc-kill-body");
+  body.textContent =
+    "SIGTERM は graceful に終了を要求します。 SIGKILL は即時強制終了で、 保存中データは失われる可能性があります。";
+  body.classList.remove("err");
+  const modal = $("#proc-kill-modal");
+  modal.querySelectorAll("button").forEach((b) => (b.disabled = false));
+  // 誤操作復帰用: 「閉じる」に切り替わっている場合は元に戻す
+  const term = modal.querySelector("[data-act=proc-kill-term], [data-act=proc-kill-close]");
+  if (term) {
+    term.dataset.act = "proc-kill-term";
+    term.textContent = "終了 (TERM)";
+  }
+  modal.hidden = false;
+}
+function closeProcKill() {
+  procKillTarget = null;
+  $("#proc-kill-modal").hidden = true;
+}
+async function fireProcKill(signal) {
+  if (!procKillTarget) return;
+  const { pid, name } = procKillTarget;
+  const modal = $("#proc-kill-modal");
+  const body = $("#proc-kill-body");
+  modal.querySelectorAll("button").forEach((b) => (b.disabled = true));
+  body.textContent = `${name} (PID ${pid}) に SIG${signal} を送信しています…`;
+  try {
+    const r = await fetch(`/api/processes/${pid}/kill`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ signal }),
+    });
+    if (!r.ok && r.status !== 204) {
+      const j = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
+      throw new Error(j.error || `HTTP ${r.status}`);
+    }
+    closeProcKill();
+  } catch (e) {
+    body.textContent = `終了に失敗しました: ${e.message}`;
+    body.classList.add("err");
+    // 「終了」ボタンを「閉じる」に転用してモーダルから抜けられるようにする
+    const term = modal.querySelector("[data-act=proc-kill-term]");
+    if (term) {
+      term.textContent = "閉じる";
+      term.dataset.act = "proc-kill-close";
+      term.disabled = false;
+    }
+    const cancel = modal.querySelector("[data-act=proc-kill-cancel]");
+    if (cancel) cancel.disabled = false;
+  }
+}
+$("#procs").addEventListener("click", (ev) => {
+  const b = ev.target.closest("button.proc-kill");
+  if (!b) return;
+  openProcKill(b.dataset.pkPid, b.dataset.pkName);
+});
+$("#proc-kill-modal").addEventListener("click", (ev) => {
+  const b = ev.target.closest("button");
+  if (!b) return;
+  const act = b.dataset.act;
+  if (act === "proc-kill-cancel" || act === "proc-kill-close") closeProcKill();
+  else if (act === "proc-kill-term") fireProcKill("TERM");
+  else if (act === "proc-kill-kill") fireProcKill("KILL");
 });
 
 // ---------- プロセス一覧のソート切り替え ----------

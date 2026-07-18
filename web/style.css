@@ -228,6 +228,31 @@ h1 {
   cursor: not-allowed;
 }
 
+/* Top Processes 行末の kill ボタン (ct-restart と同じ形状、 hover は danger) */
+.proc-kill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--card-border);
+  border-radius: 5px;
+  cursor: pointer;
+}
+.proc-kill:hover:not(:disabled) {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.proc-kill:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
 /* モーダル (リブート / コンテナ再起動 共通) */
 .modal {
   position: fixed;
@@ -285,6 +310,19 @@ h1 {
 }
 .modal-cancel:hover {
   border-color: var(--accent);
+}
+.modal-confirm {
+  border-color: var(--warn) !important;
+  color: var(--warn) !important;
+  font-weight: 650;
+}
+.modal-confirm:hover:not(:disabled) {
+  background: var(--warn) !important;
+  color: #fff !important;
+}
+.modal-confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .modal-danger {
   background: var(--danger) !important;

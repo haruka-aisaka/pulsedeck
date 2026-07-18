@@ -111,7 +111,9 @@ async function tick() {
       rx: latest.net.rxKBs,
       tx: latest.net.txKBs,
     });
-    if (clients.size > 0) broadcast("snapshot", { ...latest, containers, dockerAvailable, services });
+    if (clients.size > 0) {
+      broadcast("snapshot", { ...latest, containers, dockerAvailable, services, selfPid: Deno.pid });
+    }
   } catch (e) {
     console.error("collect error:", e);
   }
@@ -168,7 +170,7 @@ Deno.serve({ port: PORT, hostname: "0.0.0.0" }, async (req) => {
         if (latest) {
           c.enqueue(enc.encode(
             `event: snapshot\ndata: ${
-              JSON.stringify({ ...latest, containers, dockerAvailable, services })
+              JSON.stringify({ ...latest, containers, dockerAvailable, services, selfPid: Deno.pid })
             }\n\n`,
           ));
         }
@@ -187,7 +189,7 @@ Deno.serve({ port: PORT, hostname: "0.0.0.0" }, async (req) => {
   }
 
   if (url.pathname === "/api/snapshot") {
-    return Response.json({ ...latest, containers, dockerAvailable, services, histories });
+    return Response.json({ ...latest, containers, dockerAvailable, services, histories, selfPid: Deno.pid });
   }
 
   // ホストの再起動: pid: host 経由で見える systemd (PID 1) に SIGRTMIN+5 を送り reboot.target を発火
@@ -201,6 +203,37 @@ Deno.serve({ port: PORT, hostname: "0.0.0.0" }, async (req) => {
       return Response.json({ ok: true });
     } catch (e) {
       return Response.json({ error: (e as Error).message }, { status: 500 });
+    }
+  }
+
+  // ホストプロセスの終了: /api/processes/<pid>/kill  body: { signal: "TERM" | "KILL" }
+  // pid: host なので Deno.kill でホスト PID に直接シグナルを送れる
+  const killMatch = url.pathname.match(/^\/api\/processes\/(\d+)\/kill$/);
+  if (killMatch && req.method === "POST") {
+    const pid = Number(killMatch[1]);
+    let signal: "SIGTERM" | "SIGKILL" = "SIGTERM";
+    try {
+      const body = await req.json().catch(() => ({}));
+      if (body?.signal === "KILL") signal = "SIGKILL";
+      else if (body?.signal && body.signal !== "TERM") {
+        return Response.json({ error: "unsupported signal" }, { status: 400 });
+      }
+    } catch {
+      // 空ボディなら既定 (TERM) のまま
+    }
+    // 全停止・自死の防止
+    if (pid === 1) return Response.json({ error: "PID 1 は終了できません" }, { status: 400 });
+    if (pid === Deno.pid) {
+      return Response.json({ error: "PulseDeck 自身は終了できません" }, { status: 400 });
+    }
+    try {
+      Deno.kill(pid, signal);
+      return new Response(null, { status: 204 });
+    } catch (e) {
+      const msg = (e as Error).message;
+      // Deno は ESRCH / EPERM を message に含める
+      const status = /ESRCH|not found|No such/i.test(msg) ? 404 : /EPERM|permission/i.test(msg) ? 403 : 500;
+      return Response.json({ error: msg }, { status });
     }
   }
 

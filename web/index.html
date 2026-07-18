@@ -205,6 +205,21 @@
       </div>
     </div>
 
+    <!-- プロセス終了確認モーダル -->
+    <div id="proc-kill-modal" class="modal" hidden>
+      <div class="modal-box">
+        <h3 class="modal-title" id="proc-kill-title">プロセスを終了しますか？</h3>
+        <p class="modal-body" id="proc-kill-body">
+          対象プロセスにシグナルを送ります。 SIGTERM は graceful、 SIGKILL は即時強制終了です。
+        </p>
+        <div class="modal-actions">
+          <button class="modal-cancel" data-act="proc-kill-cancel">キャンセル</button>
+          <button class="modal-confirm" data-act="proc-kill-term">終了 (TERM)</button>
+          <button class="modal-danger" data-act="proc-kill-kill">強制終了 (KILL)</button>
+        </div>
+      </div>
+    </div>
+
     <!-- コンテナ再起動確認モーダル -->
     <div id="ct-restart-modal" class="modal" hidden>
       <div class="modal-box">
@@ -316,6 +331,7 @@
                   <th class="r">CPU%</th>
                   <th class="r">RSS</th>
                   <th class="r">%MEM</th>
+                  <th class="r col-act"></th>
                 </tr>
               </thead>
               <tbody></tbody>
