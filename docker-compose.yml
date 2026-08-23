@@ -2,6 +2,7 @@ services:
   pulsedeck:
     build: .
     container_name: pulsedeck
+    # 手動停止しない限り自動再起動する（クラッシュ時の自動復旧目的）
     restart: unless-stopped
     # メモリ上限。 SSE 接続増加や Canvas チャートのバッファ分を含めて余裕を持たせる
     mem_limit: 192m
