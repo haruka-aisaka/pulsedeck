@@ -6,6 +6,7 @@ const MAX_POINTS = 300; // サーバー保持の点数
 // レンジ別履歴（サーバー側でダウンサンプリング済み）
 let histories = { m10: [], h3: [], h24: [] };
 let range = "m10"; // 既定は短期
+let cpuCores = 0; // 飽和ライン (load = コア数) 描画用に最新のコア数を保持
 // 表示レンジ → 参照する履歴と点数。m1 は m10 の末尾 30 点を切り出すだけ（追加転送なし）
 const RANGE_VIEWS = {
   m1: { src: "m10", points: 30 },
@@ -69,7 +70,16 @@ const TIME_STEPS = [5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 108
 function drawChart(
   canvas,
   series,
-  { min = 0, max = 100, colors = ["#58f6c4"], fill = true, times = [], points = MAX_POINTS } = {},
+  {
+    min = 0,
+    max = 100,
+    colors = ["#58f6c4"],
+    fill = true,
+    times = [],
+    points = MAX_POINTS,
+    floorMax = 0,
+    refLine = null,
+  } = {},
 ) {
   const dpr = devicePixelRatio || 1;
   const w = canvas.clientWidth, h = canvas.clientHeight;
@@ -85,7 +95,9 @@ function drawChart(
   const lo = min;
   let hi = max;
   if (max === null) {
-    hi = Math.max(1, ...series.flat().filter((v) => v != null)) * 1.15;
+    const peak = Math.max(1, ...series.flat().filter((v) => v != null));
+    // データに追従しつつ、飽和ライン (floorMax) が常に枠内に収まる下限を確保する
+    hi = Math.max(peak * 1.15, floorMax * 1.05, (refLine?.value ?? 0) * 1.05);
   }
 
   const style = getComputedStyle(document.documentElement);
@@ -167,6 +179,26 @@ function drawChart(
     ctx.lineJoin = "round";
     ctx.stroke();
   });
+
+  // 飽和ライン（例: load = コア数 = 100% 相当）。破線＋ラベルで基準を示す
+  if (refLine && refLine.value >= lo && refLine.value <= hi) {
+    const y = toY(refLine.value);
+    ctx.save();
+    ctx.strokeStyle = cssVar("--danger");
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(w, y);
+    ctx.stroke();
+    ctx.restore();
+    if (refLine.label) {
+      ctx.fillStyle = cssVar("--danger");
+      ctx.textAlign = "left";
+      ctx.font = "10px " + cssVar("--mono");
+      ctx.fillText(refLine.label, 2, y - 3);
+    }
+  }
 }
 
 function renderCharts() {
@@ -180,6 +212,20 @@ function renderCharts() {
   const accent2 = style.getPropertyValue("--accent2").trim();
   const warn = style.getPropertyValue("--warn").trim();
   drawChart($("#c-cpu"), [history.map((p) => p.cpu)], { colors: [accent], times, points });
+  // Load: Y 軸は動的だが飽和ライン (load = コア数) を常に見せ、100% 相当を直感的に示す
+  drawChart(
+    $("#c-load"),
+    [history.map((p) => p.load1), history.map((p) => p.load5), history.map((p) => p.load15)],
+    {
+      max: null,
+      floorMax: cpuCores,
+      refLine: cpuCores > 0 ? { value: cpuCores, label: "100%" } : null,
+      fill: false,
+      colors: [accent, accent2, warn],
+      times,
+      points,
+    },
+  );
   drawChart($("#c-mem"), [history.map((p) => p.mem)], { colors: [accent2], times, points });
   drawChart($("#c-temp"), [history.map((p) => p.temp ?? 0)], {
     min: 20,
@@ -283,6 +329,7 @@ function apply(s) {
   $("#os").textContent = s.os.replace("Linux version ", "Linux ");
   $("#uptime").textContent = fmtUptime(s.uptimeSec);
   $("#load").textContent = s.load.map((v) => v.toFixed(2)).join(" ");
+  cpuCores = s.cpu.cores;
 
   setGauge(
     "#g-cpu",
@@ -324,6 +371,9 @@ function apply(s) {
       temp: s.cpu.tempC,
       rx: s.net.rxKBs,
       tx: s.net.txKBs,
+      load1: s.load[0],
+      load5: s.load[1],
+      load15: s.load[2],
     });
   }
   if (m10.length > MAX_POINTS) m10.splice(0, m10.length - MAX_POINTS);

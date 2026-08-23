@@ -444,6 +444,15 @@ h2 {
 .legend .tx {
   background: var(--accent);
 }
+.legend .l1 {
+  background: var(--accent);
+}
+.legend .l5 {
+  background: var(--accent2);
+}
+.legend .l15 {
+  background: var(--warn);
+}
 
 /* ゲージ */
 .gauges {

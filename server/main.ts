@@ -19,6 +19,9 @@ interface HistoryPoint {
   temp: number | null;
   rx: number;
   tx: number;
+  load1: number;
+  load5: number;
+  load15: number;
 }
 
 // 表示レンジ。every は 2 秒 tick 何回分を 1 点に集約するか
@@ -40,8 +43,22 @@ interface Acc {
   tempN: number;
   rx: number;
   tx: number;
+  load1: number;
+  load5: number;
+  load15: number;
 }
-const emptyAcc = (): Acc => ({ n: 0, cpu: 0, mem: 0, temp: 0, tempN: 0, rx: 0, tx: 0 });
+const emptyAcc = (): Acc => ({
+  n: 0,
+  cpu: 0,
+  mem: 0,
+  temp: 0,
+  tempN: 0,
+  rx: 0,
+  tx: 0,
+  load1: 0,
+  load5: 0,
+  load15: 0,
+});
 const accs: Record<RangeKey, Acc> = { m10: emptyAcc(), h3: emptyAcc(), h24: emptyAcc() };
 
 // 各レンジへ 1 tick 分を反映し、集約点が確定したレンジには longpoint を配信する
@@ -55,6 +72,9 @@ function pushHistory(p: HistoryPoint) {
       a.mem += p.mem;
       a.rx += p.rx;
       a.tx += p.tx;
+      a.load1 += p.load1;
+      a.load5 += p.load5;
+      a.load15 += p.load15;
       if (p.temp != null) {
         a.temp += p.temp;
         a.tempN++;
@@ -67,6 +87,9 @@ function pushHistory(p: HistoryPoint) {
         temp: a.tempN > 0 ? a.temp / a.tempN : null,
         rx: a.rx / a.n,
         tx: a.tx / a.n,
+        load1: a.load1 / a.n,
+        load5: a.load5 / a.n,
+        load15: a.load15 / a.n,
       };
       accs[key] = emptyAcc();
       broadcast("longpoint", { range: key, point });
@@ -110,6 +133,9 @@ async function tick() {
       temp: latest.cpu.tempC,
       rx: latest.net.rxKBs,
       tx: latest.net.txKBs,
+      load1: latest.load[0],
+      load5: latest.load[1],
+      load15: latest.load[2],
     });
     if (clients.size > 0) {
       broadcast("snapshot", { ...latest, containers, dockerAvailable, services, selfPid: Deno.pid });
