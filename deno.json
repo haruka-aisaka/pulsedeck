@@ -1,4 +1,7 @@
 {
+  "imports": {
+    "@std/assert": "jsr:@std/assert@^1.0.19"
+  },
   "tasks": {
     "start": "deno run --allow-all server/main.ts",
     "dev": "deno run --watch --allow-all server/main.ts",

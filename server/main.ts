@@ -1,11 +1,14 @@
 // PulseDeck: サーバー状況ダッシュボード
 // 2 秒ごとにメトリクスを収集し、SSE でブラウザへ配信する。
 
-import { Collector, Snapshot } from "./collectors.ts";
+import { Collector as LinuxCollector, Snapshot } from "./collectors.ts";
+import { DarwinCollector } from "./darwin_collectors.ts";
 import { ContainerInfo, listContainers, restartContainer } from "./docker.ts";
-import { listServices, ServiceInfo } from "./services.ts";
+import { listServices as listLinuxServices, ServiceInfo } from "./services.ts";
+import { listDarwinServices } from "./services_darwin.ts";
 
 const PORT = Number(Deno.env.get("PORT") ?? 8480);
+const HOST = Deno.env.get("HOST") ?? "0.0.0.0";
 const TICK_MS = 2000;
 const PROC_EVERY_TICKS = 3; // プロセス走査は 6 秒ごと（全 /proc 走査は高コスト）
 const DOCKER_INTERVAL_MS = 10_000;
@@ -32,7 +35,14 @@ const RANGES = [
 ] as const;
 type RangeKey = (typeof RANGES)[number]["key"];
 
-const collector = new Collector();
+const isDarwin = Deno.build.os === "darwin";
+const collector: { snapshot(includeProcs?: boolean): Promise<Snapshot> } = isDarwin
+  ? new DarwinCollector()
+  : new LinuxCollector();
+const listHostServices = isDarwin ? listDarwinServices : listLinuxServices;
+// ネイティブ macOS 実行では、認証なしのダッシュボード経由でホスト操作を提供しない。
+// Docker コンテナ操作は Docker Engine API の確認モーダルを通して引き続き提供する。
+const actions = { reboot: !isDarwin, processKill: !isDarwin };
 const histories: Record<RangeKey, HistoryPoint[]> = { m10: [], h3: [], h24: [] };
 
 interface Acc {
@@ -105,6 +115,10 @@ let containers: ContainerInfo[] = [];
 let dockerAvailable = true;
 let services: ServiceInfo[] = [];
 
+function payload(snapshot: Snapshot) {
+  return { ...snapshot, containers, dockerAvailable, services, selfPid: Deno.pid, actions };
+}
+
 function broadcast(event: string, data: unknown) {
   const payload = new TextEncoder().encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   for (const c of clients) {
@@ -138,7 +152,7 @@ async function tick() {
       load15: latest.load[2],
     });
     if (clients.size > 0) {
-      broadcast("snapshot", { ...latest, containers, dockerAvailable, services, selfPid: Deno.pid });
+      broadcast("snapshot", payload(latest));
     }
   } catch (e) {
     console.error("collect error:", e);
@@ -150,7 +164,8 @@ async function dockerTick() {
   try {
     containers = await listContainers();
     dockerAvailable = true;
-  } catch {
+  } catch (e) {
+    console.error("docker error:", e);
     dockerAvailable = false;
     containers = [];
   }
@@ -159,7 +174,7 @@ async function dockerTick() {
 async function servicesTick() {
   if (clients.size === 0) return;
   try {
-    services = await listServices(containers);
+    services = await listHostServices(containers);
   } catch (e) {
     console.error("services error:", e);
   }
@@ -180,7 +195,7 @@ const MIME: Record<string, string> = {
   ".json": "application/manifest+json",
 };
 
-Deno.serve({ port: PORT, hostname: "0.0.0.0" }, async (req) => {
+Deno.serve({ port: PORT, hostname: HOST }, async (req) => {
   const url = new URL(req.url);
 
   if (url.pathname === "/api/stream") {
@@ -194,11 +209,7 @@ Deno.serve({ port: PORT, hostname: "0.0.0.0" }, async (req) => {
         const enc = new TextEncoder();
         c.enqueue(enc.encode(`event: history\ndata: ${JSON.stringify(histories)}\n\n`));
         if (latest) {
-          c.enqueue(enc.encode(
-            `event: snapshot\ndata: ${
-              JSON.stringify({ ...latest, containers, dockerAvailable, services, selfPid: Deno.pid })
-            }\n\n`,
-          ));
+          c.enqueue(enc.encode(`event: snapshot\ndata: ${JSON.stringify(payload(latest))}\n\n`));
         }
       },
       cancel() {
@@ -215,11 +226,14 @@ Deno.serve({ port: PORT, hostname: "0.0.0.0" }, async (req) => {
   }
 
   if (url.pathname === "/api/snapshot") {
-    return Response.json({ ...latest, containers, dockerAvailable, services, histories, selfPid: Deno.pid });
+    return Response.json(latest ? { ...payload(latest), histories } : { actions, histories });
   }
 
-  // ホストの再起動: pid: host 経由で見える systemd (PID 1) に SIGRTMIN+5 を送り reboot.target を発火
+  // Linux systemd ホストだけ再起動をサポートする。macOS ネイティブ版では公開しない。
   if (url.pathname === "/api/reboot" && req.method === "POST") {
+    if (!actions.reboot) {
+      return Response.json({ error: "このホストでは再起動操作を公開していません" }, { status: 501 });
+    }
     try {
       const out = await new Deno.Command("kill", { args: ["-s", "SIGRTMIN+5", "1"] }).output();
       if (!out.success) {
@@ -232,10 +246,12 @@ Deno.serve({ port: PORT, hostname: "0.0.0.0" }, async (req) => {
     }
   }
 
-  // ホストプロセスの終了: /api/processes/<pid>/kill  body: { signal: "TERM" | "KILL" }
-  // pid: host なので Deno.kill でホスト PID に直接シグナルを送れる
+  // Linux コンテナ版だけホストプロセスの終了を公開する。
   const killMatch = url.pathname.match(/^\/api\/processes\/(\d+)\/kill$/);
   if (killMatch && req.method === "POST") {
+    if (!actions.processKill) {
+      return Response.json({ error: "このホストではプロセス終了操作を公開していません" }, { status: 501 });
+    }
     const pid = Number(killMatch[1]);
     let signal: "SIGTERM" | "SIGKILL" = "SIGTERM";
     try {
@@ -288,4 +304,4 @@ Deno.serve({ port: PORT, hostname: "0.0.0.0" }, async (req) => {
   }
 });
 
-console.log(`PulseDeck listening on http://0.0.0.0:${PORT}`);
+console.log(`PulseDeck listening on http://${HOST}:${PORT}`);

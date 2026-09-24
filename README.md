@@ -77,6 +77,32 @@ Requires [Deno](https://deno.com/) 2.x on Linux:
 deno task start
 ```
 
+## macOS (native host metrics)
+
+Docker Desktop containers cannot inspect the macOS host: their `/proc`, PID namespace, and mounted `/` belong
+only to the Linux VM. On macOS, run PulseDeck natively so every host card uses macOS data; the Docker card
+still uses Docker Desktop's local Unix socket.
+
+```bash
+# One-time install: creates and starts ~/Library/LaunchAgents/local.pulsedeck.plist
+cd pulsedeck
+deno run --allow-all scripts/install-macos-launchagent.ts
+
+# Confirm that the native service is reporting the physical host
+curl --fail http://127.0.0.1:8480/api/snapshot
+```
+
+The native LaunchAgent binds only to `127.0.0.1:8480`; keep exposing it through an authenticated/private proxy
+such as Tailscale Serve. It deliberately disables host reboot and process-kill controls because this dashboard
+has no built-in authentication. Container restart remains available through the Docker card confirmation flow.
+
+The Linux/Raspberry Pi Docker configuration remains unchanged. On this Mac, stop the former container only
+after the native service has passed the snapshot check:
+
+```bash
+docker compose stop pulsedeck
+```
+
 ## Configuration
 
 | Env var       | Default                | Description                                  |

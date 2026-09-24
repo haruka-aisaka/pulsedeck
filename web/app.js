@@ -247,12 +247,14 @@ function renderCharts() {
 const esc = (s) =>
   s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
-function renderCores(perCore) {
-  $("#cores").innerHTML = perCore.map((u, i) =>
-    `<div class="core"><span>core${i}</span><div class="bar"><i style="width:${
-      u.toFixed(1)
-    }%"></i></div><span class="pct">${u.toFixed(0)}%</span></div>`
-  ).join("");
+function renderCores(perCore, cores) {
+  $("#cores").innerHTML = perCore.length
+    ? perCore.map((u, i) =>
+      `<div class="core"><span>core${i}</span><div class="bar"><i style="width:${
+        u.toFixed(1)
+      }%"></i></div><span class="pct">${u.toFixed(0)}%</span></div>`
+    ).join("")
+    : `<div class="empty">コア別使用率はこの macOS ホストでは取得できません（全 ${cores} コア）</div>`;
 }
 
 function renderContainers(list, available) {
@@ -302,13 +304,14 @@ try {
 let lastProcs = { byCpu: [], byMem: [] };
 let lastMemTotalKB = 0;
 let selfPid = null; // PulseDeck サーバー自身の PID (kill ボタンを出さないため)
+let hostActions = { reboot: true, processKill: true };
 
 function renderProcs() {
   const list = (procSort === "mem" ? lastProcs.byMem : lastProcs.byCpu) ?? [];
   $("#procs tbody").innerHTML = list.map((p) => {
     const memPct = lastMemTotalKB > 0 ? (p.rssKB / lastMemTotalKB) * 100 : null;
     // PID 1 (systemd) は誤爆で全停止するため kill ボタンを出さない
-    const canKill = p.pid !== 1 && p.pid !== selfPid;
+    const canKill = hostActions.processKill && p.pid !== 1 && p.pid !== selfPid;
     const btn = canKill
       ? `<button class="proc-kill" data-pk-pid="${p.pid}" data-pk-name="${
         esc(p.name)
@@ -327,6 +330,8 @@ function renderProcs() {
 function apply(s) {
   $("#hostname").textContent = s.hostname;
   $("#os").textContent = s.os.replace("Linux version ", "Linux ");
+  hostActions = s.actions ?? hostActions;
+  $("#power-btn").hidden = !hostActions.reboot;
   $("#uptime").textContent = fmtUptime(s.uptimeSec);
   $("#load").textContent = s.load.map((v) => v.toFixed(2)).join(" ");
   cpuCores = s.cpu.cores;
@@ -379,7 +384,7 @@ function apply(s) {
   if (m10.length > MAX_POINTS) m10.splice(0, m10.length - MAX_POINTS);
   // 長期表示中は該当データが変わったときだけ再描画する（longpoint イベント側で描画）
   if (RANGE_VIEWS[range].src === "m10") renderCharts();
-  renderCores(s.cpu.perCore);
+  renderCores(s.cpu.perCore, s.cpu.cores);
   renderContainers(s.containers ?? [], s.dockerAvailable);
   lastProcs = s.procs ?? { byCpu: [], byMem: [] };
   lastMemTotalKB = s.mem?.totalKB ?? 0;
